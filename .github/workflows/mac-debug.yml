@@ -1,0 +1,64 @@
+# Manual diagnostic: install a released .dmg like a user would and open it with a
+# real window (not offscreen), then collect output, crash reports and a screenshot.
+name: Mac launch debug
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to test
+        default: v1.0.0
+
+jobs:
+  launch:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-latest
+            arch: arm64
+          - runner: macos-15-intel
+            arch: x86_64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Download and install the DMG
+        run: |
+          gh release download "${{ inputs.tag }}" -R "${{ github.repository }}" -p "*macos-${{ matrix.arch }}.dmg"
+          hdiutil attach -nobrowse -mountpoint /tmp/jl *.dmg
+          ditto "/tmp/jl/Jace Launcher.app" "/Applications/Jace Launcher.app"
+          hdiutil detach /tmp/jl
+          codesign -dv --verbose=2 "/Applications/Jace Launcher.app" 2>&1 || true
+          codesign --verify --deep --strict --verbose=2 "/Applications/Jace Launcher.app" 2>&1 || true
+      - name: Run the binary directly (real window)
+        run: |
+          mkdir -p out
+          "/Applications/Jace Launcher.app/Contents/MacOS/Jace Launcher" > out/direct.log 2>&1 &
+          PID=$!
+          sleep 25
+          if kill -0 $PID 2>/dev/null; then echo "STILL RUNNING after 25s" | tee -a out/direct.log; else wait $PID; echo "EXITED with code $?" | tee -a out/direct.log; fi
+          screencapture -x out/direct.png || true
+          kill $PID 2>/dev/null || true
+          cat out/direct.log
+      - name: Open like Finder does
+        run: |
+          rm -rf ~/Library/Application\ Support/JaceLauncher
+          open "/Applications/Jace Launcher.app"
+          sleep 25
+          pgrep -fl "Jace Launcher" | tee out/open.txt || echo "NOT RUNNING after open" | tee out/open.txt
+          screencapture -x out/open.png || true
+          pkill -f "Jace Launcher" || true
+      - name: Collect crash reports
+        if: always()
+        run: |
+          mkdir -p out/crash
+          cp ~/Library/Logs/DiagnosticReports/*Jace* out/crash/ 2>/dev/null || true
+          ls -la out/crash
+          for f in out/crash/*; do echo "=== $f"; head -80 "$f"; done
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: mac-debug-${{ matrix.arch }}
+          path: out
