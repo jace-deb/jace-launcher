@@ -18,7 +18,7 @@ import tempfile
 from pathlib import Path
 
 from jace import APP_VERSION, desktop, macinstall
-from jace.net import download, get_json
+from jace.net import download, get_json, session
 
 REPO = "ququoqu/jace-launcher"
 LATEST = f"https://api.github.com/repos/{REPO}/releases/latest"
@@ -68,9 +68,33 @@ def unsupported_reason() -> str | None:
     return None
 
 
+def _latest_release() -> dict:
+    """Latest release via the GitHub API. The API allows only 60 anonymous requests
+    an hour per IP address (shared networks hit that), so if it refuses, read the
+    tag from github.com's /releases/latest redirect and build the download link
+    from the release file naming instead."""
+    headers = {"Accept": "application/vnd.github+json"}
+    token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    try:
+        return get_json(LATEST, headers=headers)
+    except Exception:  # noqa: BLE001 - rate limited or API down: use the website instead
+        r = session.head(f"https://github.com/{REPO}/releases/latest", allow_redirects=False, timeout=20)
+        tag = r.headers.get("location", "").rstrip("/").rsplit("/", 1)[-1]
+        if not tag.startswith("v"):
+            raise
+        ver = tag.lstrip("v")
+        suffix = asset_suffix() or ""
+        name = f"JaceLauncher-{ver}{suffix}"
+        return {"tag_name": tag, "body": "", "html_url": f"https://github.com/{REPO}/releases/tag/{tag}",
+                "assets": [{"name": name, "size": None,
+                            "browser_download_url": f"https://github.com/{REPO}/releases/download/{tag}/{name}"}]}
+
+
 def check() -> dict | None:
     """Return {version, notes, url, size, page} if a newer release exists, else None."""
-    rel = get_json(LATEST, headers={"Accept": "application/vnd.github+json"})
+    rel = _latest_release()
     latest = rel.get("tag_name", "").lstrip("v")
     if not latest or parse_version(latest) <= parse_version(current_version()):
         return None
