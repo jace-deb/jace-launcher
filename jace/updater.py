@@ -166,8 +166,11 @@ def apply(info: dict, callback: dict, relaunch=True, extra_args=()) -> str:
         status("Unpacking…")
         subprocess.run(["ditto", "-x", "-k", str(archive), str(work / "new")], check=True)
         new_app = work / "new" / macinstall.APP_NAME
+        # Copy next to the old app first (same volume), then swap with an instant rename,
+        # so the app is never half-copied even if this is interrupted.
         script = ('while kill -0 "$0" 2>/dev/null; do sleep 0.5; done; '
-                  'rm -rf "$1" && mv "$2" "$1" && xattr -dr com.apple.quarantine "$1"'
+                  'rm -rf "$1.new" && ditto "$2" "$1.new" && xattr -dr com.apple.quarantine "$1.new" '
+                  '&& rm -rf "$1.old" && mv "$1" "$1.old" && mv "$1.new" "$1" && rm -rf "$1.old"'
                   + ('; open "$1"' if relaunch else ''))
         subprocess.Popen(["/bin/sh", "-c", script, str(os.getpid()), str(target), str(new_app)],
                          start_new_session=True, stdin=subprocess.DEVNULL,

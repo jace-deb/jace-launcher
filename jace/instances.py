@@ -35,6 +35,15 @@ class Instance:
     def loader_version(self): return self.data.get("loader_version", "")
     @property
     def game_dir(self) -> Path: return self.folder / "minecraft"
+    @property
+    def icon_path(self) -> Path: return self.folder / "icon.png"
+
+    def window_size(self) -> tuple[int, int]:
+        """This instance's game window size, or the global setting if it has none."""
+        w, h = int(self.data.get("window_width") or 0), int(self.data.get("window_height") or 0)
+        if w > 0 and h > 0:
+            return w, h
+        return int(settings.get("window_width")), int(settings.get("window_height"))
 
     def content_dir(self, kind: str) -> Path:
         d = self.game_dir / CONTENT_FOLDERS.get(kind, "mods")
@@ -86,8 +95,8 @@ class Instance:
             "gameDirectory": str(self.game_dir),
             "executablePath": java,
             "customResolution": True,
-            "resolutionWidth": str(settings.get("window_width")),
-            "resolutionHeight": str(settings.get("window_height")),
+            "resolutionWidth": str(self.window_size()[0]),
+            "resolutionHeight": str(self.window_size()[1]),
         }
         if server:
             if self._supports_quick_play():
@@ -102,7 +111,9 @@ class Instance:
         xuid = account.get("xuid") or "0"
         return [a.replace("${auth_xuid}", xuid).replace("${clientid}", "0") for a in cmd]
 
-    def launch(self, account: dict, server: str | None = None) -> subprocess.Popen:
+    def launch(self, account: dict, server: str | None = None, detached=False) -> subprocess.Popen:
+        """Start the game. detached=True (used by desktop shortcuts) writes the game
+        log to logs/jace-launch.log so the game keeps running after the launcher quits."""
         self.game_dir.mkdir(parents=True, exist_ok=True)
         cmd = self.build_command(account, server)
         self.data["last_played"] = time.time()
@@ -110,6 +121,16 @@ class Instance:
         kwargs = {}
         if sys.platform == "win32":
             kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
+        if detached:
+            log_dir = self.game_dir / "logs"
+            log_dir.mkdir(parents=True, exist_ok=True)
+            log = open(log_dir / "jace-launch.log", "w", encoding="utf-8", errors="replace")
+            if sys.platform == "win32":
+                kwargs["creationflags"] |= subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
+            else:
+                kwargs["start_new_session"] = True
+            return subprocess.Popen(cmd, cwd=self.game_dir, stdout=log, stderr=subprocess.STDOUT,
+                                    stdin=subprocess.DEVNULL, **kwargs)
         return subprocess.Popen(cmd, cwd=self.game_dir, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                 stdin=subprocess.DEVNULL, text=True, errors="replace", bufsize=1, **kwargs)
 
@@ -119,6 +140,8 @@ class Instance:
         return sorted((p for p in d.iterdir() if p.is_file() or kind != "mod"), key=lambda p: p.name.lower())
 
     def delete(self):
+        from jace import shortcuts
+        shortcuts.remove(self)
         shutil.rmtree(self.folder)
 
 

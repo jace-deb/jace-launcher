@@ -4,7 +4,7 @@ import sys
 import threading
 
 from PySide6.QtCore import QTimer, Signal
-from PySide6.QtGui import QFont, QIcon, QTextCursor
+from PySide6.QtGui import QFont, QIcon, QPixmap, QTextCursor
 from PySide6.QtWidgets import (QApplication, QButtonGroup, QDialog, QFileDialog, QHBoxLayout, QInputDialog, QLabel,
                                QMainWindow, QMessageBox, QPlainTextEdit, QProgressBar, QPushButton, QStackedWidget,
                                QVBoxLayout, QWidget)
@@ -17,6 +17,8 @@ from jace.ui.accounts_page import AccountsPage
 from jace.ui.browse_page import BrowsePage
 from jace.ui.common import STYLE, run_task, show_error
 from jace.ui.friends_page import FriendsPage
+from jace.instance_icons import icon_image
+from jace.instances import list_instances
 from jace.ui.installer import FirstRunDialog, SetupWizard, confirm_uninstall
 from jace.ui.instances_page import InstancesPage
 from jace.ui.settings_page import SettingsPage
@@ -397,6 +399,67 @@ def start_installed(installed):
             downloaded.unlink(missing_ok=True)   # fine on Linux: the running image stays mounted
 
 
+def quick_launch(argv) -> bool:
+    """--launch <instance id> (desktop shortcuts): start that instance with no launcher
+    window. Returns False if the main window should open instead (e.g. no account)."""
+    import time
+    iid = argv[argv.index("--launch") + 1] if argv.index("--launch") + 1 < len(argv) else ""
+    inst = next((i for i in list_instances() if i.id == iid), None)
+    if not inst:
+        show_error(None, f"This shortcut's instance ({iid}) no longer exists.", "Instance not found")
+        return True
+    acc = accounts.current()
+    if not acc:
+        QMessageBox.information(None, "Add an account", "Add a Microsoft or offline account first, then try the "
+                                "shortcut again.")
+        return False
+
+    dlg = QDialog()
+    dlg.setWindowTitle(f"Starting {inst.name}")
+    dlg.setMinimumWidth(420)
+    lay = QHBoxLayout(dlg)
+    icon = QLabel()
+    icon.setPixmap(QPixmap.fromImage(icon_image(inst, 64)))
+    lay.addWidget(icon)
+    col = QVBoxLayout()
+    col.addWidget(QLabel(f"<b style='font-size:15px'>{inst.name}</b><br>"
+                         f"<span style='color:#8b919c'>{inst.describe()} · {acc['username']}</span>"))
+    status = QLabel("Getting ready…")
+    status.setObjectName("muted")
+    bar = QProgressBar()
+    bar.setRange(0, 0)
+    col.addWidget(status)
+    col.addWidget(bar)
+    lay.addLayout(col, 1)
+
+    def prepare(callback):
+        account = accounts.ensure_fresh(acc)
+        inst.install(callback)
+        callback["setStatus"]("Starting Minecraft…")
+        proc = inst.launch(account, detached=True)
+        for _ in range(10):                       # catch an instant crash instead of failing silently
+            time.sleep(0.5)
+            if proc.poll() is not None and proc.returncode != 0:
+                log = inst.game_dir / "logs" / "jace-launch.log"
+                tail = log.read_text(errors="replace").splitlines()[-15:] if log.exists() else []
+                raise RuntimeError(f"Minecraft closed right away (exit code {proc.returncode}).\n\n"
+                                   + "\n".join(tail))
+        return proc
+
+    def fail(msg):
+        show_error(dlg, msg, f"Couldn't start {inst.name}")
+        dlg.reject()
+
+    def prog(v, m):
+        if m > 0:
+            bar.setRange(0, m)
+            bar.setValue(min(v, m))
+    run_task(prepare, use_callback=True, on_status=status.setText, on_progress=prog,
+             on_done=lambda _: dlg.accept(), on_error=fail)
+    dlg.exec()
+    return True
+
+
 def close_splash():
     """Close the PyInstaller splash screen (Windows setup .exe) if there is one."""
     import os
@@ -465,7 +528,9 @@ def main():
             return
         if not wiz.launch_after():
             return
-    elif not settings.get("welcomed"):
+    if "--launch" in argv and quick_launch(argv):
+        return
+    if not settings.get("welcomed"):
         settings.set("welcomed", True)
         if not accounts.accounts:
             FirstRunDialog().exec()

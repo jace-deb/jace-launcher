@@ -8,7 +8,7 @@ from PySide6.QtWidgets import (QCheckBox, QComboBox, QDialog, QDialogButtonBox, 
 
 from jace.content import PROJECT_TYPES, SOURCES, install_modpack_version, install_version
 from jace.instances import list_instances
-from jace.ui.common import fmt_count, load_image_into, run_task, show_error
+from jace.ui.common import fetch_image, fmt_count, load_image_into, run_task, show_error
 
 PAGE_SIZE = 20
 
@@ -280,6 +280,12 @@ class BrowsePage(QWidget):
 
                 def pack_done(res):
                     new_inst, manual = res
+                    if p.get("icon_url"):        # use the modpack's own icon for the instance
+                        def save_icon(img, inst=new_inst):
+                            if not img.isNull():
+                                img.save(str(inst.icon_path), "PNG")
+                                self.instance_created.emit(inst)
+                        run_task(fetch_image, p["icon_url"], on_done=save_icon, on_error=lambda m: None)
                     self.refresh_instances()
                     self.instance_created.emit(new_inst)
                     if manual:

@@ -3,38 +3,21 @@ import shutil
 from pathlib import Path
 
 from PySide6.QtCore import QSize, Qt, Signal
-from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPixmap
+from PySide6.QtGui import QIcon, QImage, QPixmap
 from PySide6.QtWidgets import (QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFileDialog, QFormLayout,
-                               QHBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem, QMessageBox,
+                               QHBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem, QMenu, QMessageBox,
                                QPushButton, QSpinBox, QTabWidget, QVBoxLayout, QWidget)
 
+from jace import shortcuts
 from jace.config import settings
+from jace.instance_icons import icon_image
 from jace.instances import Instance, create_instance, list_instances
 from jace.loaders import LOADERS, mojang_versions
 from jace.ui.common import run_task, show_error
 from jace.ui.settings_page import open_folder, total_ram_mb
 
-LOADER_COLORS = {"vanilla": "#5b8c3a", "fabric": "#c6a875", "quilt": "#9c5bd6", "forge": "#df7a3a",
-                 "neoforge": "#e0a046", "legacyfabric": "#4f8fd6"}
-
-
 def instance_icon(inst: Instance, size=72) -> QIcon:
-    pm = QPixmap(size, size)
-    pm.fill(Qt.GlobalColor.transparent)
-    p = QPainter(pm)
-    p.setRenderHint(QPainter.RenderHint.Antialiasing)
-    p.setBrush(QColor(LOADER_COLORS.get(inst.loader, "#555")))
-    p.setPen(Qt.PenStyle.NoPen)
-    p.drawRoundedRect(0, 0, size, size, 14, 14)
-    p.setPen(QColor("#ffffff"))
-    f = QFont()
-    f.setBold(True)
-    f.setPixelSize(size // 3)
-    p.setFont(f)
-    initials = "".join(w[0] for w in inst.name.split()[:2]).upper() or "?"
-    p.drawText(pm.rect(), Qt.AlignmentFlag.AlignCenter, initials)
-    p.end()
-    return QIcon(pm)
+    return QIcon(QPixmap.fromImage(icon_image(inst, size * 2)))
 
 
 def sort_versions(versions: list[str]) -> list[str]:
@@ -245,6 +228,38 @@ class InstanceDialog(QDialog):
         f = QFormLayout(w)
         self.name = QLineEdit(inst.name)
         f.addRow("Name", self.name)
+
+        icon_row = QHBoxLayout()
+        self.icon_preview = QLabel()
+        self.icon_preview.setFixedSize(64, 64)
+        icon_row.addWidget(self.icon_preview)
+        for label, slot in (("Choose image…", self._choose_icon), ("Icon builder…", self._build_icon),
+                            ("Reset", self._reset_icon)):
+            b = QPushButton(label)
+            b.clicked.connect(slot)
+            icon_row.addWidget(b)
+        icon_row.addStretch()
+        f.addRow("Icon", icon_row)
+        self._update_icon_preview()
+
+        size_row = QHBoxLayout()
+        self.win_w = QSpinBox()
+        self.win_w.setRange(0, 7680)
+        self.win_w.setSpecialValueText("Global")
+        self.win_w.setValue(int(inst.data.get("window_width") or 0))
+        self.win_h = QSpinBox()
+        self.win_h.setRange(0, 4320)
+        self.win_h.setSpecialValueText("Global")
+        self.win_h.setValue(int(inst.data.get("window_height") or 0))
+        size_row.addWidget(self.win_w)
+        size_row.addWidget(QLabel("×"))
+        size_row.addWidget(self.win_h)
+        for label, (ww, hh) in (("720p", (1280, 720)), ("1080p", (1920, 1080)), ("Global", (0, 0))):
+            b = QPushButton(label)
+            b.clicked.connect(lambda _=False, ww=ww, hh=hh: (self.win_w.setValue(ww), self.win_h.setValue(hh)))
+            size_row.addWidget(b)
+        size_row.addStretch()
+        f.addRow("Window size", size_row)
         self.mem = QSpinBox()
         self.mem.setRange(0, max(1024, total_ram_mb()))
         self.mem.setSingleStep(512)
@@ -258,6 +273,17 @@ class InstanceDialog(QDialog):
         self.jvm = QLineEdit(inst.data.get("jvm_args", ""))
         self.jvm.setPlaceholderText("Use global setting")
         f.addRow("JVM arguments", self.jvm)
+        sc_row = QHBoxLayout()
+        sc = QPushButton("Create shortcut")
+        sc.setToolTip(f"Desktop and {shortcuts.menu_name()} shortcut that starts this instance in one click")
+        sc.clicked.connect(self._make_shortcut)
+        sc_row.addWidget(sc)
+        self.rm_sc = QPushButton("Remove shortcut")
+        self.rm_sc.clicked.connect(self._remove_shortcut)
+        self.rm_sc.setEnabled(shortcuts.has_shortcuts(inst))
+        sc_row.addWidget(self.rm_sc)
+        sc_row.addStretch()
+        f.addRow("Shortcut", sc_row)
         repair = QPushButton("Reinstall game files")
         repair.clicked.connect(self._repair)
         f.addRow("", repair)
@@ -275,9 +301,59 @@ class InstanceDialog(QDialog):
 
     def _save(self):
         self.inst.data.update({"name": self.name.text().strip() or self.inst.name, "memory_mb": self.mem.value(),
-                               "java_path": self.java.text().strip(), "jvm_args": self.jvm.text().strip()})
+                               "java_path": self.java.text().strip(), "jvm_args": self.jvm.text().strip(),
+                               "window_width": self.win_w.value(), "window_height": self.win_h.value()})
         self.inst.save()
+        if shortcuts.has_shortcuts(self.inst):     # keep shortcut name/icon in sync
+            shortcuts.remove(self.inst)
+            shortcuts.create(self.inst)
         self.accept()
+
+    # -- icon
+    def _update_icon_preview(self):
+        self.icon_preview.setPixmap(QPixmap.fromImage(icon_image(self.inst, 64)))
+
+    def _set_icon(self, img: QImage):
+        img.scaled(256, 256, Qt.AspectRatioMode.KeepAspectRatio,
+                   Qt.TransformationMode.SmoothTransformation).save(str(self.inst.icon_path), "PNG")
+        self._update_icon_preview()
+
+    def _choose_icon(self):
+        path, _ = QFileDialog.getOpenFileName(self, "Choose an icon", "", "Images (*.png *.jpg *.jpeg *.webp *.bmp *.gif)")
+        if path:
+            img = QImage(path)
+            if img.isNull():
+                show_error(self, "That image couldn't be opened.")
+                return
+            side = min(img.width(), img.height())   # center-crop to a square
+            self._set_icon(img.copy((img.width() - side) // 2, (img.height() - side) // 2, side, side))
+
+    def _build_icon(self):
+        from jace.ui.icon_builder import IconBuilderDialog
+        dlg = IconBuilderDialog("".join(w[0] for w in self.inst.name.split()[:2]), self)
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            self._set_icon(dlg.result_image())
+
+    def _reset_icon(self):
+        self.inst.icon_path.unlink(missing_ok=True)
+        self._update_icon_preview()
+
+    # -- shortcuts
+    def _make_shortcut(self):
+        try:
+            made = shortcuts.create(self.inst)
+        except Exception as e:  # noqa: BLE001
+            show_error(self, str(e), "Couldn't create shortcut")
+            return
+        self.rm_sc.setEnabled(True)
+        QMessageBox.information(self, "Shortcut created",
+                                f"Double-click “{self.inst.name}” on your desktop or in the {shortcuts.menu_name()} "
+                                "to start it straight away.\n\n" + "\n".join(str(p) for p in made))
+
+    def _remove_shortcut(self):
+        shortcuts.remove(self.inst)
+        self.inst.save()
+        self.rm_sc.setEnabled(False)
 
     def _repair(self):
         self.inst.data.pop("version_id", None)
@@ -319,6 +395,8 @@ class InstancesPage(QWidget):
         self.list.setWordWrap(True)
         self.list.setSpacing(6)
         self.list.itemDoubleClicked.connect(lambda it: self.play_requested.emit(self.current()))
+        self.list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.list.customContextMenuRequested.connect(self._context_menu)
         self.list.currentItemChanged.connect(lambda *_: self.selection_changed.emit(self.current()))
         lay.addWidget(self.list, 1)
         self.empty = QLabel("No instances yet.\n\nClick  “+ New instance”  to pick a Minecraft version and mod loader,\n"
@@ -361,6 +439,28 @@ class InstancesPage(QWidget):
         self.list.setVisible(bool(self._instances))
         self.empty.setVisible(not self._instances)
         self.selection_changed.emit(self.current())
+
+    def _context_menu(self, pos):
+        if not self.list.itemAt(pos):
+            return
+        inst = self.current()
+        menu = QMenu(self)
+        menu.addAction("Play", lambda: self.play_requested.emit(inst))
+        menu.addAction("Edit / Mods", self.edit)
+        menu.addAction(f"Create desktop && {shortcuts.menu_name()} shortcut", lambda: self._quick_shortcut(inst))
+        menu.addAction("Open folder", lambda: open_folder(inst.game_dir))
+        menu.addSeparator()
+        menu.addAction("Delete", self.delete)
+        menu.exec(self.list.viewport().mapToGlobal(pos))
+
+    def _quick_shortcut(self, inst):
+        try:
+            shortcuts.create(inst)
+        except Exception as e:  # noqa: BLE001
+            show_error(self, str(e), "Couldn't create shortcut")
+            return
+        QMessageBox.information(self, "Shortcut created", f"“{inst.name}” is on your desktop and in the "
+                                f"{shortcuts.menu_name()}. Double-click it to play straight away.")
 
     def instances(self):
         return self._instances

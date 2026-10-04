@@ -172,7 +172,7 @@ jobs:
           LATEST=$(gh release view -R "${{ github.repository }}" --json tagName --jq .tagName | tr -d v)
           for i in $(seq 1 30); do
             V=$(/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" "$APP/Contents/Info.plist" 2>/dev/null || true)
-            [ "$V" = "$LATEST" ] && break; sleep 2
+            [ "$V" = "$LATEST" ] && [ -x "$APP/Contents/MacOS/Jace Launcher" ] && [ ! -e "$APP.new" ] && break; sleep 2
           done
           echo "installed version now: $V (latest release: $LATEST)"
           [ "$V" = "$LATEST" ]

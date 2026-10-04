@@ -8,6 +8,9 @@ A desktop launcher for Minecraft: Java Edition, written in Python and Qt (PySide
 - **Mod loaders**: Fabric, Quilt, Forge, NeoForge and Legacy Fabric (1.3–1.13).
 - **Java is handled for you**: each version gets the Java runtime Mojang ships for it (Java 8, 16, 17 or 21). You can also point it at your own Java.
 - **Instances**: every instance has its own folder for mods, saves, resource packs and shaders. Versions, libraries and assets are downloaded once and shared between instances.
+- **Instance shortcuts**: right-click an instance and choose **Create shortcut**, or use the instance's Settings. You get a desktop and Start menu / Launchpad / applications-menu shortcut that starts that instance straight away, with no launcher window.
+- **Per-instance settings**: window size, memory, Java and JVM arguments.
+- **Instance icons**: choose any image, or design one in the **Icon builder** (shape, colors and gradients, text, symbols, or any Minecraft block or item texture). Modpacks use their own icon automatically.
 - **Modrinth**: search and install mods, modpacks, resource packs and shaders. Results are filtered to the selected instance's version and loader, and required dependencies are installed automatically.
 - **CurseForge** (optional): the same browsing once you add a free API key in Settings.
 - **Modpacks**: install from either site, or import a `.mrpack` or CurseForge `.zip` file.
@@ -43,7 +46,7 @@ GitHub Actions builds every platform, because PyInstaller can't build Windows or
 
 | Platform | File | Install |
 |---|---|---|
-| Windows 10/11 | `JaceLauncher-<ver>-windows-x64.exe` | Run it; a setup wizard installs it (no admin needed). |
+| Windows 10/11 | `JaceLauncher-<ver>-windows-x64.exe` | Run it; a setup wizard installs it (no admin needed). It also runs under Wine/Bottles, which CI tests. |
 | macOS 12+ (Apple Silicon) | `JaceLauncher-<ver>-macos-arm64.app.zip` | Safari unzips it to **Jace Launcher.app** in Downloads. Open it and a setup wizard installs it (see below). |
 | macOS 12+ (Intel) | `JaceLauncher-<ver>-macos-x86_64.app.zip` | Same as above. |
 | Linux | `JaceLauncher-<ver>-x86_64.AppImage` | Run it; the setup wizard does the rest (see below). |

@@ -70,11 +70,12 @@ def shortcut_paths() -> list[Path]:
     return [start_menu_dir() / "Jace Launcher.lnk", desktop_dir() / "Jace Launcher.lnk"]
 
 
-def _make_shortcut(lnk: Path, exe: Path):
+def make_shortcut(lnk: Path, exe: Path, args=(), icon: Path | None = None, description="Jace Launcher"):
     q = lambda p: str(p).replace("'", "''")  # noqa: E731 - PowerShell single-quote escaping
+    arg_str = " ".join(f'"{a}"' for a in args)
     ps = (f"$s=(New-Object -ComObject WScript.Shell).CreateShortcut('{q(lnk)}');"
-          f"$s.TargetPath='{q(exe)}';$s.WorkingDirectory='{q(exe.parent)}';"
-          f"$s.IconLocation='{q(exe)},0';$s.Description='Jace Launcher';$s.Save()")
+          f"$s.TargetPath='{q(exe)}';$s.Arguments='{q(arg_str)}';$s.WorkingDirectory='{q(exe.parent)}';"
+          f"$s.IconLocation='{q(icon or exe)},0';$s.Description='{q(description)}';$s.Save()")
     lnk.parent.mkdir(parents=True, exist_ok=True)
     subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", ps],
                    check=True, creationflags=NO_WINDOW, capture_output=True)
@@ -156,11 +157,11 @@ def install(target_dir: Path, options: dict, status=print) -> tuple[Path, list[s
     parts = []
     if options.get("startmenu"):
         status("Adding to the Start menu")
-        _make_shortcut(shortcut_paths()[0], exe)
+        make_shortcut(shortcut_paths()[0], exe)
         parts.append("startmenu")
     if options.get("desktop"):
         status("Creating desktop shortcut")
-        _make_shortcut(shortcut_paths()[1], exe)
+        make_shortcut(shortcut_paths()[1], exe)
         parts.append("desktop")
     if options.get("apps"):
         status("Adding to Installed apps")
