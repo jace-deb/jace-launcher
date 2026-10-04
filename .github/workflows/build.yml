@@ -45,6 +45,9 @@ jobs:
           $exe = "$dir\JaceLauncher.exe"
           if (!(Test-Path $exe)) { throw "not installed" }
           if (!(Test-Path "$dir\_internal")) { throw "_internal missing" }
+          foreach ($dll in "vcruntime140.dll","vcruntime140_1.dll","msvcp140.dll","msvcp140_1.dll","msvcp140_2.dll","concrt140.dll") {
+            if (!(Test-Path "$dir\_internal\$dll")) { throw "VC++ runtime $dll not bundled" }
+          }
           $sm = [Environment]::GetFolderPath("Programs") + "\Jace Launcher.lnk"
           $dt = [Environment]::GetFolderPath("Desktop") + "\Jace Launcher.lnk"
           if (!(Test-Path $sm)) { throw "Start menu shortcut missing" }

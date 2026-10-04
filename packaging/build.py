@@ -45,11 +45,30 @@ def pyinstaller(name: str, icon: Path, extra=()):
     return BUILD / "dist"
 
 
+# Microsoft Visual C++ runtime DLLs that Qt and Python need. Most Windows PCs have
+# them, but fresh installs and Wine prefixes (Bottles, Lutris) often don't, which
+# makes QtCore fail with "DLL load failed". Microsoft allows shipping them app-locally.
+VC_RUNTIME = ["vcruntime140.dll", "vcruntime140_1.dll", "msvcp140.dll", "msvcp140_1.dll",
+              "msvcp140_2.dll", "concrt140.dll"]
+
+
+def vc_runtime_args() -> list:
+    system32 = Path(os.environ.get("SystemRoot", r"C:\Windows")) / "System32"
+    args = []
+    for dll in VC_RUNTIME:
+        src = system32 / dll
+        if not src.is_file():
+            sys.exit(f"Missing {src} - install the Visual C++ 2015-2022 redistributable (x64)")
+        args += ["--add-binary", f"{src}{os.pathsep}."]
+    return args
+
+
 def build_windows():
     """One self-installing .exe: a onefile build that also carries a small onedir
     launcher, which the setup wizard installs next to the unpacked app files."""
     from PIL import Image
-    onedir = pyinstaller("JaceLauncher", ASSETS / "icon.ico")
+    vc = vc_runtime_args()
+    onedir = pyinstaller("JaceLauncher", ASSETS / "icon.ico", vc)
     launcher = onedir / "JaceLauncher" / "JaceLauncher.exe"
     keep = ROOT / "build" / "win-launcher"
     shutil.rmtree(keep, ignore_errors=True)
@@ -59,7 +78,7 @@ def build_windows():
     splash = ROOT / "build" / "splash.png"
     Image.open(ASSETS / "icon.png").convert("RGBA").resize((256, 256), Image.NEAREST).save(splash)
     out = pyinstaller("JaceLauncher", ASSETS / "icon.ico",
-                      ["--onefile", "--splash", splash,
+                      [*vc, "--onefile", "--splash", splash,
                        "--add-data", f"{keep / 'JaceLauncher.exe'}{os.pathsep}jace_setup"])
     DIST.mkdir(exist_ok=True)
     final = DIST / f"JaceLauncher-{APP_VERSION}-windows-x64.exe"
