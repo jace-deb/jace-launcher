@@ -8,6 +8,7 @@ version: {source, id, project_id, name, version_number, game_versions, loaders, 
           file: {url, filename, sha1} | None, deps: [project_id, ...]}
 """
 import json
+import shutil
 import tempfile
 import zipfile
 from pathlib import Path
@@ -215,6 +216,54 @@ def _has_project(inst: Instance, pid: str) -> bool:
     folder = inst.content_dir("mod")
     return any(str(r.get("project_id")) == pid and ((folder / n).exists() or (folder / (n + ".disabled")).exists())
                for n, r in inst.data.get("content", {}).items())
+
+
+# -- What's installed (for the Browse page) ----------------------------------------------
+
+_sha_cache: dict = {}
+
+
+def _cached_sha1(path: Path) -> str:
+    st = path.stat()
+    key = (str(path), st.st_size, st.st_mtime)
+    if key not in _sha_cache:
+        _sha_cache[key] = file_sha1(path)
+    return _sha_cache[key]
+
+
+def installed_projects(inst: Instance, kind: str) -> dict[str, list[Path]]:
+    """{project id: [files]} for everything of this kind in the instance: launcher
+    installs from the records, plus hand-added files matched by hash on Modrinth."""
+    folder = inst.content_dir(kind)
+    files = {p.name.removesuffix(".disabled"): p for p in folder.iterdir() if p.is_file()}
+    out: dict[str, list[Path]] = {}
+    for name, rec in inst.data.get("content", {}).items():
+        if rec.get("kind", "mod") == kind and name in files:
+            out.setdefault(str(rec["project_id"]), []).append(files[name])
+    unknown = {_cached_sha1(p): p for n, p in files.items()
+               if not any(p in v for v in out.values())}
+    if unknown:
+        try:
+            r = session.post(f"{Modrinth.API}/version_files", json={"hashes": list(unknown), "algorithm": "sha1"},
+                             timeout=30)
+            if r.ok:
+                for h, v in r.json().items():
+                    out.setdefault(str(v["project_id"]), []).append(unknown[h])
+        except Exception:  # noqa: BLE001 - offline: launcher records are still used
+            pass
+    return out
+
+
+def delete_project(inst: Instance, kind: str, files: list[Path]):
+    """Remove a project's files from the instance (and the launcher's records of them)."""
+    records = inst.data.get("content", {})
+    for f in files:
+        if f.is_dir():
+            shutil.rmtree(f)
+        else:
+            f.unlink(missing_ok=True)
+        records.pop(f.name.removesuffix(".disabled"), None)
+    inst.save()
 
 
 # -- Mod updates and dependencies ----------------------------------------------------

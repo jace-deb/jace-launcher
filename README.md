@@ -15,6 +15,7 @@ A desktop launcher for Minecraft: Java Edition, written in Python and Qt (PySide
 - **Mod updates**: **Check for updates** on an instance's Mods tab finds newer compatible versions (even for mods you added by hand, matched by file hash on Modrinth). **Update all** installs them and keeps disabled mods disabled.
 - **Dependencies**: missing required dependencies are installed automatically when you install a mod, add a jar by hand, or check for updates, including dependencies of dependencies.
 - **CurseForge** (optional): the same browsing once you add a free API key in Settings.
+- **Already installed?** In Browse, mods, resource packs and shaders already in the selected instance show a red **Delete** button instead of **Install**. That includes ones you added by hand. Click it to remove the item from the instance. Modpacks always show **Install**.
 - **Modpacks**: install from either site, or import a `.mrpack` or CurseForge `.zip` file.
 - **Skin and cape changer**:
   - front and back preview with the cape shown

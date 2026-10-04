@@ -6,7 +6,8 @@ from PySide6.QtWidgets import (QCheckBox, QComboBox, QDialog, QDialogButtonBox, 
                                QLabel, QLineEdit, QListWidget, QListWidgetItem, QMessageBox, QPushButton,
                                QVBoxLayout, QWidget)
 
-from jace.content import PROJECT_TYPES, SOURCES, install_modpack_version, install_version
+from jace.content import (PROJECT_TYPES, SOURCES, delete_project, install_modpack_version, install_version,
+                          installed_projects)
 from jace.instances import list_instances
 from jace.ui.common import fetch_image, fmt_count, load_image_into, run_task, show_error
 
@@ -49,9 +50,12 @@ class VersionPicker(QDialog):
 
 class ResultCard(QFrame):
     install_clicked = Signal(dict)
+    delete_clicked = Signal(dict, list)
 
     def __init__(self, p: dict):
         super().__init__()
+        self.p = p
+        self.installed_files: list = []
         self.setObjectName("card")
         lay = QHBoxLayout(self)
         lay.setContentsMargins(12, 10, 12, 10)
@@ -74,15 +78,34 @@ class ResultCard(QFrame):
         text.addWidget(meta)
         lay.addLayout(text, 1)
         btns = QVBoxLayout()
-        inst = QPushButton("Install")
-        inst.setObjectName("primary")
-        inst.clicked.connect(lambda: self.install_clicked.emit(p))
+        self.btn = QPushButton("Install")
+        self.btn.setObjectName("primary")
+        self.btn.setMinimumWidth(84)
+        self.btn.clicked.connect(self._clicked)
         page = QPushButton("Page")
         page.clicked.connect(lambda: webbrowser.open(p["url"]))
-        btns.addWidget(inst)
+        btns.addWidget(self.btn)
         btns.addWidget(page)
         btns.addStretch()
         lay.addLayout(btns)
+
+
+    def _clicked(self):
+        if self.installed_files:
+            self.delete_clicked.emit(self.p, self.installed_files)
+        else:
+            self.install_clicked.emit(self.p)
+
+    def set_installed(self, files: list | None):
+        """Already in the instance -> the button deletes it instead of installing."""
+        self.installed_files = list(files or [])
+        installed = bool(self.installed_files)
+        self.btn.setText("Delete" if installed else "Install")
+        self.btn.setObjectName("danger" if installed else "primary")
+        self.btn.setToolTip("Remove it from this instance: " + ", ".join(f.name for f in self.installed_files)
+                            if installed else "")
+        self.btn.style().unpolish(self.btn)        # re-apply the stylesheet for the new objectName
+        self.btn.style().polish(self.btn)
 
 
 class BrowsePage(QWidget):
@@ -94,6 +117,8 @@ class BrowsePage(QWidget):
         self.setObjectName("page")
         self.offset = 0
         self.query_id = 0
+        self.installed: dict = {}
+        self._installed_gen = 0
         lay = QVBoxLayout(self)
         lay.setContentsMargins(28, 24, 28, 24)
         t = QLabel("Browse")
@@ -176,6 +201,47 @@ class BrowsePage(QWidget):
             self.kind.setCurrentIndex(idx)
         self.do_search()
 
+    # --- what's already installed in the target instance
+    def refresh_installed(self):
+        kind = self.kind.currentData()
+        inst = self.target_instance()
+        self._installed_gen += 1
+        gen = self._installed_gen
+        if kind == "modpack" or not inst:          # modpacks always show Install
+            self.installed = {}
+            self._apply_installed()
+            return
+
+        def done(found):
+            if gen == self._installed_gen:
+                self.installed = found
+                self._apply_installed()
+        run_task(installed_projects, inst, kind, on_done=done, on_error=lambda m: None)
+
+    def _apply_installed(self):
+        for i in range(self.results.count()):
+            card = self.results.itemWidget(self.results.item(i))
+            if isinstance(card, ResultCard) and card.p["project_type"] != "modpack":
+                card.set_installed(self.installed.get(str(card.p["id"])))
+
+    def delete(self, p: dict, files: list):
+        inst = self.target_instance()
+        if not inst:
+            return
+        names = "\n".join(f.name for f in files)
+        if QMessageBox.question(self, "Delete from instance",
+                                f"Delete {p['title']} from {inst.name}?\n\n{names}") != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            delete_project(inst, self.kind.currentData(), files)
+        except OSError as e:
+            show_error(self, str(e), "Couldn't delete")
+            return
+        self.installed.pop(str(p["id"]), None)
+        self._apply_installed()
+        self.runner.notify(f"Deleted {p['title']} from {inst.name}")
+        self.refresh_installed()
+
     def _kind_changed(self):
         is_pack = self.kind.currentData() == "modpack"
         for w in (self.target_label, self.target, self.filter):
@@ -199,6 +265,7 @@ class BrowsePage(QWidget):
             return
         if not append:
             self.offset = 0
+            self.refresh_installed()
         gv = loader = None
         inst = self.target_instance()
         if kind != "modpack" and inst and self.filter.isChecked():
@@ -217,6 +284,9 @@ class BrowsePage(QWidget):
             for p in hits:
                 card = ResultCard(p)
                 card.install_clicked.connect(self.install)
+                card.delete_clicked.connect(self.delete)
+                if p["project_type"] != "modpack":
+                    card.set_installed(self.installed.get(str(p["id"])))
                 it = QListWidgetItem()
                 it.setSizeHint(QSize(100, card.sizeHint().height() + 4))
                 it.setFlags(Qt.ItemFlag.NoItemFlags)
@@ -298,7 +368,8 @@ class BrowsePage(QWidget):
                 self.runner.run_job(
                     lambda callback: install_version(inst, v, kind, True, callback["setStatus"]),
                     f"Installing {p['title']}",
-                    lambda files: self.runner.notify(f"Installed {', '.join(files)} into {inst.name}"), True)
+                    lambda files: (self.runner.notify(f"Installed {', '.join(files)} into {inst.name}"),
+                                   self.refresh_installed()), True)
 
         self.runner.notify(f"Loading versions of {p['title']}…")
         run_task(src.versions, p["id"], gv, loader, kind, on_done=got_versions,
