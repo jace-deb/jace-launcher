@@ -7,6 +7,7 @@ import plistlib
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 APP_NAME = "Jace Launcher.app"
@@ -80,14 +81,20 @@ def dock_add(app: Path):
 
 
 def dock_remove(app_name=APP_NAME):
-    prefs = _dock_prefs()
-    apps = prefs.get("persistent-apps", [])
-    keep = [t for t in apps if not _tile_url(t).rstrip("/").endswith(app_name.replace(" ", "%20"))]
-    if len(keep) == len(apps):
-        return
-    prefs["persistent-apps"] = keep
-    subprocess.run(["defaults", "import", "com.apple.dock", "-"], input=plistlib.dumps(prefs), check=False)
-    _run(["killall", "Dock"])
+    """Remove our Dock icon. The Dock saves its own copy of the icon list when it
+    restarts, so if it was still starting up (e.g. right after dock_add) it can
+    write our icon back; check the result and retry a few times."""
+    suffix = app_name.replace(" ", "%20")
+    for _ in range(5):
+        prefs = _dock_prefs()
+        apps = prefs.get("persistent-apps", [])
+        keep = [t for t in apps if not _tile_url(t).rstrip("/").endswith(suffix)]
+        if len(keep) == len(apps):
+            return
+        prefs["persistent-apps"] = keep
+        subprocess.run(["defaults", "import", "com.apple.dock", "-"], input=plistlib.dumps(prefs), check=False)
+        _run(["killall", "Dock"])
+        time.sleep(2)
 
 
 # --- install / uninstall ---------------------------------------------------------------
