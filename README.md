@@ -44,7 +44,7 @@ GitHub Actions builds every platform, because PyInstaller can't build Windows or
 |---|---|---|
 | Windows 10/11 | `JaceLauncher-<ver>-windows-x64-setup.exe` | Setup wizard: choose the folder, desktop shortcut and Start menu entry. Includes an uninstaller. |
 | Windows | `…-windows-x64-portable.zip` | Unzip and run `JaceLauncher.exe`. |
-| macOS 12+ (Apple Silicon) | `JaceLauncher-<ver>-macos-arm64.dmg` | Open it and drag Jace Launcher into Applications. |
+| macOS 12+ (Apple Silicon) | `JaceLauncher-<ver>-macos-arm64.dmg` | Open the DMG and open Jace Launcher. A setup wizard installs it (see below). |
 | macOS 12+ (Intel) | `JaceLauncher-<ver>-macos-x86_64.dmg` | Same as above. |
 | Linux | `JaceLauncher-<ver>-x86_64.AppImage` | Run it; the setup wizard does the rest (see below). |
 
@@ -61,6 +61,17 @@ The first launch on every platform asks you to add your accounts. **Settings →
 - **Windows SmartScreen** shows "Windows protected your PC". Click **More info → Run anyway**.
 
 To build on a Mac or Windows PC yourself, install the requirements plus `pyinstaller pillow`, then run `python packaging/build.py`. Windows also needs [Inno Setup](https://jrsoftware.org/isinfo.php).
+
+### macOS setup wizard
+
+When you open Jace Launcher straight from the DMG (or from Downloads), a setup wizard:
+1. signs in to your accounts
+2. lets you choose where to install: `/Applications`, `~/Applications`, or any other folder
+3. can add the app to the Dock and your desktop, and add a `jace-launcher` Terminal command
+4. removes the "downloaded from the internet" flag, so macOS won't later say the app is "damaged"
+5. registers the app with Launchpad and Spotlight, starts the installed copy, and ejects the DMG
+
+Dragging the app into Applications yourself also works. **Settings → Delete Jace Launcher** removes the app, its Dock icon and its shortcuts.
 
 ## AppImage and installer
 
