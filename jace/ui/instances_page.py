@@ -3,12 +3,12 @@ import shutil
 from pathlib import Path
 
 from PySide6.QtCore import QSize, Qt, Signal
-from PySide6.QtGui import QIcon, QImage, QPixmap
+from PySide6.QtGui import QColor, QIcon, QImage, QPixmap
 from PySide6.QtWidgets import (QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFileDialog, QFormLayout,
                                QHBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem, QMenu, QMessageBox,
                                QPushButton, QSpinBox, QTabWidget, QVBoxLayout, QWidget)
 
-from jace import shortcuts
+from jace import content, shortcuts
 from jace.config import settings
 from jace.instance_icons import icon_image
 from jace.instances import Instance, create_instance, list_instances
@@ -141,12 +141,28 @@ class ContentTab(QWidget):
     def __init__(self, inst: Instance, kind: str, browse_cb):
         super().__init__()
         self.inst, self.kind = inst, kind
+        self.updates: dict[str, dict] = {}
         lay = QVBoxLayout(self)
+        if kind == "mod":
+            top = QHBoxLayout()
+            self.mod_status = QLabel("")
+            self.mod_status.setObjectName("muted")
+            self.mod_status.setWordWrap(True)
+            top.addWidget(self.mod_status, 1)
+            self.check_btn = QPushButton("Check for updates")
+            self.check_btn.clicked.connect(self.check_updates)
+            self.update_all_btn = QPushButton("Update all")
+            self.update_all_btn.setObjectName("primary")
+            self.update_all_btn.clicked.connect(self.update_all)
+            self.update_all_btn.hide()
+            top.addWidget(self.check_btn)
+            top.addWidget(self.update_all_btn)
+            lay.addLayout(top)
         self.list = QListWidget()
         self.list.itemChanged.connect(self._toggled)
         lay.addWidget(self.list)
         row = QHBoxLayout()
-        b = QPushButton("Browse & download")
+        b = QPushButton("Browse && download")
         b.setObjectName("primary")
         b.clicked.connect(lambda: browse_cb(inst, kind))
         add = QPushButton("Add files...")
@@ -168,7 +184,11 @@ class ContentTab(QWidget):
         self.list.clear()
         for p in self.inst.list_content(self.kind):
             disabled = p.name.endswith(".disabled")
-            it = QListWidgetItem(p.name.removesuffix(".disabled"))
+            name = p.name.removesuffix(".disabled")
+            upd = self.updates.get(name)
+            it = QListWidgetItem(name + (f"     ⬆ update: {upd['latest']['version_number']}" if upd else ""))
+            if upd:
+                it.setForeground(QColor("#3ddc84"))
             it.setData(Qt.ItemDataRole.UserRole, str(p))
             if self.kind == "mod":
                 it.setFlags(it.flags() | Qt.ItemFlag.ItemIsUserCheckable)
@@ -194,6 +214,70 @@ class ContentTab(QWidget):
         for f in files:
             shutil.copy2(f, self.inst.content_dir(self.kind))
         self.refresh()
+        if files and self.kind == "mod":
+            self.fix_dependencies()          # hand-added mods get their dependencies too
+
+    # -- mod updates & dependencies
+    def _busy(self, on: bool, text=""):
+        self.check_btn.setEnabled(not on)
+        self.update_all_btn.setEnabled(not on)
+        if text:
+            self.mod_status.setText(text)
+
+    def fix_dependencies(self):
+        self._busy(True, "Checking dependencies…")
+
+        def done(files):
+            self._busy(False, f"Installed missing dependencies: {', '.join(files)}" if files
+                       else "All dependencies are installed.")
+            self.refresh()
+
+        def fail(msg):
+            self._busy(False, f"Couldn't check dependencies: {msg}")
+        run_task(content.install_missing_dependencies, self.inst, on_done=done, on_error=fail)
+
+    def check_updates(self):
+        self._busy(True, "Checking for updates and missing dependencies…")
+
+        def work():
+            info = content.identify_mods(self.inst)
+            deps = content.install_missing_dependencies(self.inst)
+            return content.check_mod_updates(self.inst), deps, info
+
+        def done(res):
+            updates, deps, info = res
+            self.updates = {u["filename"]: u for u in updates}
+            unknown = sum(1 for i in info.values() if not i["source"])
+            parts = [f"{len(updates)} update(s) available." if updates else "All mods are up to date."]
+            if deps:
+                parts.append(f"Installed missing dependencies: {', '.join(deps)}.")
+            if unknown:
+                parts.append(f"{unknown} mod(s) aren't on Modrinth, so they can't be checked.")
+            self._busy(False, " ".join(parts))
+            self.update_all_btn.setText(f"Update all ({len(updates)})")
+            self.update_all_btn.setVisible(bool(updates))
+            self.refresh()
+
+        def fail(msg):
+            self._busy(False, f"Couldn't check for updates: {msg}")
+        run_task(work, on_done=done, on_error=fail)
+
+    def update_all(self):
+        updates = list(self.updates.values())
+        if not updates:
+            return
+        self._busy(True, f"Updating {len(updates)} mod(s)…")
+
+        def done(files):
+            self.updates = {}
+            self.update_all_btn.hide()
+            self._busy(False, f"Updated: {', '.join(files)}")
+            self.refresh()
+
+        def fail(msg):
+            self._busy(False, f"Update failed: {msg}")
+            self.refresh()
+        run_task(content.update_mods, self.inst, updates, on_done=done, on_error=fail)
 
     def _delete(self):
         it = self.list.currentItem()

@@ -3,13 +3,14 @@ import random
 import zipfile
 from pathlib import Path
 
-from PySide6.QtCore import QPointF, QRectF, QSize, Qt
+from PySide6.QtCore import QPointF, QRectF, QSize, Qt, QTimer
 from PySide6.QtGui import QColor, QFont, QIcon, QImage, QLinearGradient, QPainter, QPainterPath, QPixmap
 from PySide6.QtWidgets import (QCheckBox, QColorDialog, QComboBox, QDialog, QDialogButtonBox, QFormLayout, QGridLayout,
                                QHBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem, QPushButton, QSlider,
                                QTabWidget, QVBoxLayout, QWidget)
 
 from jace.config import GAME_ROOT
+from jace.ui.common import run_task
 
 SIZE = 256
 SYMBOLS = list("★♥♦♣♠⚔⛏⚒☀☾✦❄☁⚡☠♛♜⚑✿❖⬢◆●▲✚✪♫⌂⚙")
@@ -20,6 +21,15 @@ PALETTE = ["#3ddc84", "#2f9e5f", "#4f8fd6", "#2b4c8c", "#9c5bd6", "#5b2a86", "#d
 # --- Minecraft textures from an installed client jar ------------------------------
 
 _tex_cache: dict = {}
+_zips: dict = {}
+_thumbs: dict = {}
+
+
+def _zip(jar: Path) -> zipfile.ZipFile:
+    """Keep the client jar open: reopening a 25 MB zip per texture is what made this slow."""
+    if jar not in _zips:
+        _zips[jar] = zipfile.ZipFile(jar)
+    return _zips[jar]
 
 
 def find_client_jar() -> Path | None:
@@ -33,20 +43,34 @@ def find_client_jar() -> Path | None:
 
 def texture_names(jar: Path) -> list[str]:
     if jar not in _tex_cache:
-        with zipfile.ZipFile(jar) as z:
-            names = [n for n in z.namelist() if n.endswith(".png") and (
-                n.startswith("assets/minecraft/textures/item/") or n.startswith("assets/minecraft/textures/block/")
-                or n.startswith("assets/minecraft/textures/items/") or n.startswith("assets/minecraft/textures/blocks/"))]
+        names = [n for n in _zip(jar).namelist() if n.endswith(".png") and (
+            n.startswith("assets/minecraft/textures/item/") or n.startswith("assets/minecraft/textures/block/")
+            or n.startswith("assets/minecraft/textures/items/") or n.startswith("assets/minecraft/textures/blocks/"))]
         _tex_cache[jar] = sorted(names, key=lambda n: Path(n).stem)
     return _tex_cache[jar]
 
 
 def load_texture(jar: Path, name: str) -> QImage:
-    with zipfile.ZipFile(jar) as z:
-        img = QImage.fromData(z.read(name))
+    img = QImage.fromData(_zip(jar).read(name))
     if not img.isNull() and img.height() > img.width():          # animated strip: first frame
         img = img.copy(0, 0, img.width(), img.width())
     return img
+
+
+def thumbnails(jar: Path, names: list[str]) -> list[tuple[str, QImage]]:
+    """32px previews (runs in a worker thread; cached across searches)."""
+    out = []
+    z = zipfile.ZipFile(jar)          # own handle: zip reads aren't thread-safe on a shared one
+    for n in names:
+        if (jar, n) not in _thumbs:
+            img = QImage.fromData(z.read(n))
+            if not img.isNull() and img.height() > img.width():
+                img = img.copy(0, 0, img.width(), img.width())
+            _thumbs[(jar, n)] = img.scaled(32, 32, Qt.AspectRatioMode.KeepAspectRatio,
+                                           Qt.TransformationMode.FastTransformation)
+        out.append((n, _thumbs[(jar, n)]))
+    z.close()
+    return out
 
 
 # --- Rendering ---------------------------------------------------------------------
@@ -231,7 +255,11 @@ class IconBuilderDialog(QDialog):
         self.tex_note.setObjectName("muted")
         self.tex_note.setWordWrap(True)
         bl.addWidget(self.tex_note)
-        self.search.textChanged.connect(self._fill_textures)
+        self._search_timer = QTimer(self, singleShot=True, interval=250)
+        self._search_timer.timeout.connect(self._fill_textures)
+        self.search.textChanged.connect(lambda: self._search_timer.start())
+        self._textures_loaded = False
+        self._fill_gen = 0
         self.tabs.addTab(bw, "Block / item")
         self.tabs.addTab(QLabel("No picture - just the background."), "None")
         self.tabs.currentChanged.connect(self._tab_changed)
@@ -254,7 +282,6 @@ class IconBuilderDialog(QDialog):
         bb.rejected.connect(self.reject)
         right.addWidget(bb)
         outer.addLayout(right, 1)
-        self._fill_textures()
         self._refresh()
 
     # -- state
@@ -266,6 +293,9 @@ class IconBuilderDialog(QDialog):
 
     def _tab_changed(self, i):
         self.state["content"] = ["text", "symbol", "texture", "none"][i]
+        if i == 2 and not self._textures_loaded:      # only load textures when this tab is opened
+            self._textures_loaded = True
+            self._fill_textures()
         self._refresh()
 
     def _refresh(self):
@@ -284,14 +314,22 @@ class IconBuilderDialog(QDialog):
         q = self.search.text().strip().lower().replace(" ", "_")
         names = [n for n in texture_names(self.jar) if q in Path(n).stem]
         shown = names[:400]
-        for n in shown:
-            it = QListWidgetItem(QIcon(QPixmap.fromImage(load_texture(self.jar, n).scaled(
-                32, 32, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.FastTransformation))), "")
-            it.setToolTip(Path(n).stem.replace("_", " "))
-            it.setData(Qt.ItemDataRole.UserRole, n)
-            self.textures.addItem(it)
         more = f" Showing {len(shown)} of {len(names)} - type to narrow it down." if len(names) > len(shown) else ""
         self.tex_note.setText(f"Pictures from Minecraft {self.jar.stem}.{more}")
+        self._fill_gen += 1
+        gen = self._fill_gen
+
+        def add(results):
+            if gen != self._fill_gen:          # a newer search replaced this one
+                return
+            for n, thumb in results:
+                it = QListWidgetItem(QIcon(QPixmap.fromImage(thumb)), "")
+                it.setToolTip(Path(n).stem.replace("_", " "))
+                it.setData(Qt.ItemDataRole.UserRole, n)
+                self.textures.addItem(it)
+        # load in small batches so the first pictures appear right away
+        for i in range(0, len(shown), 60):
+            run_task(thumbnails, self.jar, shown[i:i + 60], on_done=add, on_error=lambda m: None)
 
     def _pick_texture(self, it):
         if not it:
@@ -308,6 +346,9 @@ class IconBuilderDialog(QDialog):
         self.state.update(color1=a, color2=b, background=random.choice(["diagonal", "vertical", "solid"]),
                           roundness=random.randint(15, 60), shape=random.choice(["rounded", "rounded", "circle"]))
         if self.jar and random.random() < 0.6:
+            if not self._textures_loaded:
+                self._textures_loaded = True
+                self._fill_textures()
             names = texture_names(self.jar)
             self.state["texture"] = random.choice(names)
             self.state["texture_img"] = load_texture(self.jar, self.state["texture"])

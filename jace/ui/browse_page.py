@@ -33,9 +33,9 @@ class VersionPicker(QDialog):
         self.list.setCurrentRow(0)
         self.list.itemDoubleClicked.connect(lambda *_: self.accept())
         lay.addWidget(self.list)
-        self.deps = QCheckBox("Also install required dependencies")
-        self.deps.setChecked(True)
-        lay.addWidget(self.deps)
+        self.deps_note = QLabel("Required dependencies are installed automatically.")
+        self.deps_note.setObjectName("muted")
+        lay.addWidget(self.deps_note)
         bb = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
         bb.button(QDialogButtonBox.StandardButton.Ok).setText("Install")
         bb.accepted.connect(self.accept)
@@ -268,8 +268,8 @@ class BrowsePage(QWidget):
                 show_error(self, f"No compatible version of {p['title']}{where}.", "Not available")
                 return
             dlg = VersionPicker(p["title"], vs, self)
-            if kind == "modpack":
-                dlg.deps.hide()
+            if kind != "mod":
+                dlg.deps_note.hide()
             if dlg.exec() != QDialog.DialogCode.Accepted or not dlg.selected():
                 return
             v = dlg.selected()
@@ -295,9 +295,8 @@ class BrowsePage(QWidget):
                 self.runner.run_job(install_modpack_version, f"Installing {p['title']}", pack_done,
                                     True, v, name=name.strip() or p["title"])
             else:
-                with_deps = dlg.deps.isChecked()
                 self.runner.run_job(
-                    lambda callback: install_version(inst, v, kind, with_deps, callback["setStatus"]),
+                    lambda callback: install_version(inst, v, kind, True, callback["setStatus"]),
                     f"Installing {p['title']}",
                     lambda files: self.runner.notify(f"Installed {', '.join(files)} into {inst.name}"), True)
 

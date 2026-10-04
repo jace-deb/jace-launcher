@@ -15,7 +15,7 @@ from pathlib import Path
 from jace.config import settings
 from jace.instances import Instance, create_instance
 from jace.loaders import CURSEFORGE_LOADER, MODRINTH_LOADER
-from jace.net import download, get_json, safe_join, session
+from jace.net import download, file_sha1, get_json, safe_join, session
 
 PROJECT_TYPES = {"mod": "Mods", "modpack": "Modpacks", "resourcepack": "Resource Packs", "shader": "Shaders"}
 
@@ -195,6 +195,8 @@ def install_version(inst: Instance, version: dict, kind: str, with_deps=True, st
     installed = [f["filename"]]
     if with_deps and kind == "mod":
         src = SOURCES[version["source"]]
+        if len(_seen) == 1:
+            identify_mods(inst)      # also count mods that were added by hand as installed
         for dep in version["deps"]:
             dep_pid = str(dep.get("project_id") or "")
             if dep_pid and _has_project(inst, dep_pid):
@@ -213,6 +215,148 @@ def _has_project(inst: Instance, pid: str) -> bool:
     folder = inst.content_dir("mod")
     return any(str(r.get("project_id")) == pid and ((folder / n).exists() or (folder / (n + ".disabled")).exists())
                for n, r in inst.data.get("content", {}).items())
+
+
+# -- Mod updates and dependencies ----------------------------------------------------
+
+def _mod_files(inst: Instance) -> dict[str, Path]:
+    """Installed mod jars by name (a disabled mod is listed under its normal name)."""
+    out = {}
+    for p in inst.content_dir("mod").iterdir():
+        if p.is_file() and (p.name.endswith(".jar") or p.name.endswith(".jar.disabled")):
+            out[p.name.removesuffix(".disabled")] = p
+    return out
+
+
+def identify_mods(inst: Instance) -> dict[str, dict]:
+    """Work out which project every mod jar belongs to. Modrinth can identify a jar
+    from its hash, so this also covers mods that were added by hand; launcher
+    records cover CurseForge installs. Newly identified jars are recorded."""
+    files = _mod_files(inst)
+    sha = {name: file_sha1(path) for name, path in files.items()}
+    info = {name: {"path": files[name], "sha1": h, "source": None, "project_id": None, "version": None}
+            for name, h in sha.items()}
+    if sha:
+        r = session.post(f"{Modrinth.API}/version_files", json={"hashes": list(sha.values()), "algorithm": "sha1"},
+                         timeout=30)
+        if r.ok:
+            by_hash = {h: n for n, h in sha.items()}
+            for h, v in r.json().items():
+                name = by_hash.get(h)
+                if name:
+                    info[name].update(source="modrinth", project_id=v["project_id"], version_id=v["id"],
+                                      version=SOURCES["modrinth"]._version(v))
+    records = inst.data.setdefault("content", {})
+    for name, i in info.items():
+        rec = records.get(name)
+        if i["source"] is None and rec and rec.get("kind", "mod") == "mod":
+            i.update(source=rec["source"], project_id=str(rec["project_id"]), version_id=str(rec.get("version_id")))
+        elif i["source"] == "modrinth" and (not rec or str(rec.get("project_id")) != i["project_id"]):
+            records[name] = {"source": "modrinth", "project_id": i["project_id"], "version_id": i["version_id"],
+                             "kind": "mod"}
+    inst.save()
+    return info
+
+
+def _project_titles(ids: list[str]) -> dict[str, str]:
+    if not ids:
+        return {}
+    try:
+        data = get_json(f"{Modrinth.API}/projects", params={"ids": json.dumps(ids)})
+        return {p["id"]: p["title"] for p in data}
+    except Exception:  # noqa: BLE001 - titles are only cosmetic
+        return {}
+
+
+def check_mod_updates(inst: Instance, info: dict | None = None) -> list[dict]:
+    """Mods with a newer compatible version: [{filename, title, current, latest}]."""
+    info = info if info is not None else identify_mods(inst)
+    updates = []
+    mr = {i["sha1"]: n for n, i in info.items() if i["source"] == "modrinth"}
+    if mr:
+        body = {"hashes": list(mr), "algorithm": "sha1", "game_versions": [inst.mc_version]}
+        if inst.loader in MODRINTH_LOADER:
+            body["loaders"] = [MODRINTH_LOADER[inst.loader]]
+        r = session.post(f"{Modrinth.API}/version_files/update", json=body, timeout=30)
+        if r.ok:
+            for h, v in r.json().items():
+                name = mr.get(h)
+                if name and v["id"] != info[name]["version_id"]:
+                    updates.append({"filename": name, "project_id": v["project_id"],
+                                    "current": info[name]["version"]["version_number"],
+                                    "latest": SOURCES["modrinth"]._version(v)})
+    cf = SOURCES["curseforge"]
+    if cf.available():
+        for name, i in info.items():
+            if i["source"] != "curseforge":
+                continue
+            try:
+                vs = cf.versions(i["project_id"], inst.mc_version, inst.loader)
+            except Exception:  # noqa: BLE001
+                continue
+            if vs and str(vs[0]["id"]) != str(i.get("version_id")):
+                updates.append({"filename": name, "project_id": i["project_id"], "current": name,
+                                "latest": vs[0]})
+    titles = _project_titles([u["project_id"] for u in updates if u["latest"]["source"] == "modrinth"])
+    for u in updates:
+        u["title"] = titles.get(u["project_id"]) or u["latest"]["name"]
+    return updates
+
+
+def missing_dependencies(inst: Instance, info: dict | None = None) -> list[dict]:
+    """Required dependencies of installed mods that aren't installed:
+    [{project_id, title, version, needed_by}]."""
+    info = info if info is not None else identify_mods(inst)
+    installed = {str(i["project_id"]) for i in info.values() if i["project_id"]}
+    needed: dict[str, list[str]] = {}
+    for name, i in info.items():
+        if i["version"]:
+            for dep in i["version"]["deps"]:
+                pid = str(dep.get("project_id") or "")
+                if pid and pid not in installed:
+                    needed.setdefault(pid, []).append(name)
+    titles = _project_titles(list(needed))
+    out = []
+    for pid, by in needed.items():
+        try:
+            vs = SOURCES["modrinth"].versions(pid, inst.mc_version, inst.loader)
+        except Exception:  # noqa: BLE001
+            vs = []
+        out.append({"project_id": pid, "title": titles.get(pid, pid), "version": vs[0] if vs else None,
+                    "needed_by": by})
+    return out
+
+
+def install_missing_dependencies(inst: Instance, status=None) -> list[str]:
+    installed = []
+    for _ in range(3):                    # dependencies can have dependencies of their own
+        missing = [m for m in missing_dependencies(inst) if m["version"] and m["version"]["file"]]
+        if not missing:
+            break
+        for m in missing:
+            installed += install_version(inst, m["version"], "mod", True, status)
+    return installed
+
+
+def update_mods(inst: Instance, updates: list[dict], status=None) -> list[str]:
+    """Install the newer versions (plus any new dependencies), replacing the old jars."""
+    done = []
+    files = _mod_files(inst)
+    for u in updates:
+        old = files.get(u["filename"])
+        was_disabled = bool(old and old.name.endswith(".disabled"))
+        new_name = u["latest"]["file"]["filename"] if u["latest"]["file"] else None
+        if not new_name:
+            continue
+        done += install_version(inst, u["latest"], "mod", True, status)
+        if old and old.exists() and old.name.removesuffix(".disabled") != new_name:
+            old.unlink()
+            inst.data.get("content", {}).pop(u["filename"], None)
+        new_path = inst.content_dir("mod") / new_name
+        if was_disabled and new_path.exists():
+            new_path.rename(new_path.with_name(new_name + ".disabled"))
+    inst.save()
+    return done
 
 
 # -- Modpacks ------------------------------------------------------------------

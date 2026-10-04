@@ -12,6 +12,8 @@ A desktop launcher for Minecraft: Java Edition, written in Python and Qt (PySide
 - **Per-instance settings**: window size, memory, Java and JVM arguments.
 - **Instance icons**: choose any image, or design one in the **Icon builder** (shape, colors and gradients, text, symbols, or any Minecraft block or item texture). Modpacks use their own icon automatically.
 - **Modrinth**: search and install mods, modpacks, resource packs and shaders. Results are filtered to the selected instance's version and loader, and required dependencies are installed automatically.
+- **Mod updates**: **Check for updates** on an instance's Mods tab finds newer compatible versions (even for mods you added by hand, matched by file hash on Modrinth). **Update all** installs them and keeps disabled mods disabled.
+- **Dependencies**: missing required dependencies are installed automatically when you install a mod, add a jar by hand, or check for updates, including dependencies of dependencies.
 - **CurseForge** (optional): the same browsing once you add a free API key in Settings.
 - **Modpacks**: install from either site, or import a `.mrpack` or CurseForge `.zip` file.
 - **Skin and cape changer**:
