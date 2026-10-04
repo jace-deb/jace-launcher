@@ -9,7 +9,7 @@ from PySide6.QtWidgets import (QApplication, QButtonGroup, QDialog, QFileDialog,
                                QMainWindow, QMessageBox, QPlainTextEdit, QProgressBar, QPushButton, QStackedWidget,
                                QVBoxLayout, QWidget)
 
-from jace import APP_NAME, APP_VERSION, desktop, macinstall, updater, wininstall
+from jace import APP_NAME, APP_VERSION, AUTHOR, desktop, macinstall, updater, wininstall
 from jace.accounts import accounts
 from jace.config import settings
 from jace.content import import_modpack_file
@@ -113,7 +113,7 @@ class MainWindow(QMainWindow):
             self.stack.addWidget(page)
         self.nav.button(0).setChecked(True)
         sl.addStretch()
-        ver = QLabel(f"v{APP_VERSION}")
+        ver = QLabel(f"v{APP_VERSION}  ·  by {AUTHOR}")
         ver.setObjectName("muted")
         ver.setContentsMargins(18, 0, 0, 0)
         sl.addWidget(ver)

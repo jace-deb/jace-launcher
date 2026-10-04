@@ -14,7 +14,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from jace import APP_VERSION
+from jace import APP_VERSION, AUTHOR, GITHUB_URL
 
 APP_KEY = r"Software\Microsoft\Windows\CurrentVersion\Uninstall\JaceLauncher"
 EMBEDDED_DIR = "jace_setup"          # where the onedir launcher sits inside the onefile build
@@ -111,11 +111,11 @@ def _register_app(exe: Path):
     import winreg
     with winreg.CreateKey(winreg.HKEY_CURRENT_USER, APP_KEY) as k:
         for name, val in (("DisplayName", "Jace Launcher"), ("DisplayVersion", APP_VERSION),
-                          ("Publisher", "Jace"), ("DisplayIcon", f'"{exe}",0'),
+                          ("Publisher", AUTHOR), ("DisplayIcon", f'"{exe}",0'),
                           ("InstallLocation", str(exe.parent)),
                           ("UninstallString", f'"{exe}" --uninstall-gui'),
                           ("QuietUninstallString", f'"{exe}" --uninstall'),
-                          ("URLInfoAbout", "https://github.com/ququoqu/jace-launcher")):
+                          ("URLInfoAbout", GITHUB_URL)):
             winreg.SetValueEx(k, name, 0, winreg.REG_SZ, val)
         for name, val in (("NoModify", 1), ("NoRepair", 1), ("EstimatedSize", _dir_size_kb(exe.parent))):
             winreg.SetValueEx(k, name, 0, winreg.REG_DWORD, val)

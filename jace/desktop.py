@@ -15,7 +15,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from jace import APP_RELEASE_DATE, APP_VERSION, macinstall, wininstall
+from jace import APP_RELEASE_DATE, APP_VERSION, AUTHOR, GITHUB_URL, macinstall, wininstall
 from jace.config import DATA_DIR, read_json, write_json
 
 APP_ID = "io.github.jacelauncher.JaceLauncher"
@@ -144,7 +144,8 @@ def _metainfo() -> str:
   <id>{APP_ID}</id>
   <name>Jace Launcher</name>
   <summary>Minecraft: Java Edition launcher with mod loaders, Modrinth and CurseForge</summary>
-  <developer id="io.github.jacelauncher"><name>Jace</name></developer>
+  <developer id="io.github.jace-deb"><name>{AUTHOR}</name></developer>
+  <url type="homepage">{GITHUB_URL}</url>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>MIT</project_license>
   <description>

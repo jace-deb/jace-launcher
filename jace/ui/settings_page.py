@@ -4,7 +4,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, QUrl, Signal
+from PySide6.QtGui import QDesktopServices, QPixmap
 from PySide6.QtWidgets import (QCheckBox, QComboBox, QFileDialog, QFormLayout, QGroupBox, QHBoxLayout, QLabel,
                                QLineEdit, QMessageBox, QPushButton, QScrollArea, QSizePolicy, QSpinBox, QVBoxLayout, QWidget)
 
@@ -205,6 +206,29 @@ class SettingsPage(QWidget):
         row.addStretch()
         row.addWidget(save)
         lay.addLayout(row)
+
+        # --- About
+        from jace import APP_VERSION, AUTHOR, GITHUB_URL, desktop as _desk
+        g = QGroupBox("About")
+        f = QHBoxLayout(g)
+        logo = QLabel()
+        logo.setPixmap(QPixmap(str(_desk.ICON_SRC)).scaled(56, 56, Qt.AspectRatioMode.KeepAspectRatio,
+                                                           Qt.TransformationMode.SmoothTransformation))
+        f.addWidget(logo)
+        about = QLabel(f"<b style='font-size:15px'>Jace Launcher {APP_VERSION}</b><br>"
+                       f"Made by <b>{AUTHOR}</b><br>"
+                       f"<a href='{GITHUB_URL}' style='color:#3ddc84'>{GITHUB_URL.removeprefix('https://')}</a>")
+        about.setTextFormat(Qt.TextFormat.RichText)
+        about.setOpenExternalLinks(True)
+        about.setTextInteractionFlags(Qt.TextInteractionFlag.TextBrowserInteraction)
+        f.addWidget(about, 1)
+        gh = QPushButton("GitHub")
+        gh.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(GITHUB_URL)))
+        rel = QPushButton("Release notes")
+        rel.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(f"{GITHUB_URL}/releases")))
+        f.addWidget(gh)
+        f.addWidget(rel)
+        lay.addWidget(g)
 
         # --- Delete the app (always available)
         g = QGroupBox("Delete Jace Launcher")

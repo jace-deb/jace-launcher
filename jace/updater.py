@@ -17,10 +17,10 @@ import sys
 import tempfile
 from pathlib import Path
 
-from jace import APP_VERSION, desktop, macinstall
+from jace import APP_VERSION, GITHUB_REPO, desktop, macinstall
 from jace.net import download, get_json, session
 
-REPO = "ququoqu/jace-launcher"
+REPO = GITHUB_REPO
 LATEST = f"https://api.github.com/repos/{REPO}/releases/latest"
 
 
@@ -80,8 +80,9 @@ def _latest_release() -> dict:
     try:
         return get_json(LATEST, headers=headers)
     except Exception:  # noqa: BLE001 - rate limited or API down: use the website instead
-        r = session.head(f"https://github.com/{REPO}/releases/latest", allow_redirects=False, timeout=20)
-        tag = r.headers.get("location", "").rstrip("/").rsplit("/", 1)[-1]
+        # follow redirects: a renamed account/repo redirects first, then /latest -> /tag/vX
+        r = session.head(f"https://github.com/{REPO}/releases/latest", allow_redirects=True, timeout=20)
+        tag = r.url.rstrip("/").rsplit("/", 1)[-1]
         if not tag.startswith("v"):
             raise
         ver = tag.lstrip("v")
