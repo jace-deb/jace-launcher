@@ -8,6 +8,18 @@ def _part(skin: QImage, x, y, w, h, mirror=False) -> QImage:
     return img.flipped(Qt.Orientation.Horizontal) if mirror else img
 
 
+def _hat_usable(skin: QImage) -> bool:
+    """Old 64x32 skins often have a fully opaque (usually black) hat layer. Minecraft
+    ignores it in that case ("Notch transparency hack"), so we do too."""
+    if skin.height() >= 64:
+        return True
+    for y in range(0, 16):
+        for x in range(32, 64):
+            if skin.pixelColor(x, y).alpha() < 255:
+                return True
+    return False
+
+
 def detect_slim(skin: QImage) -> bool:
     """Slim skins leave the 4th arm column transparent."""
     if skin.height() < 64:
@@ -63,8 +75,9 @@ def render_skin(skin: QImage, slim: bool, back=False, cape: QImage | None = None
 
     for base, overlay, x, y in layers:
         draw(_part(skin, *base), x, y)
+    hat_ok = _hat_usable(skin)
     for base, overlay, x, y in layers:
-        if not legacy or overlay[1] < 32:   # legacy skins only have the hat layer
+        if not legacy or (overlay[1] < 32 and hat_ok):   # legacy skins only have the hat layer
             draw(_part(skin, *overlay), x, y)
 
     if back and cape is not None and not cape.isNull():
@@ -94,7 +107,8 @@ def render_head(skin: QImage, size=32) -> QPixmap:
     head.fill(Qt.GlobalColor.transparent)
     p = QPainter(head)
     p.drawImage(0, 0, skin.copy(8, 8, 8, 8))
-    p.drawImage(0, 0, skin.copy(40, 8, 8, 8))
+    if _hat_usable(skin.convertToFormat(QImage.Format.Format_ARGB32)):
+        p.drawImage(0, 0, skin.copy(40, 8, 8, 8))
     p.end()
     return QPixmap.fromImage(head.scaled(size, size, Qt.AspectRatioMode.IgnoreAspectRatio,
                                          Qt.TransformationMode.FastTransformation))

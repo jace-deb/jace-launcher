@@ -1,4 +1,5 @@
 """Main window: sidebar navigation, pages, and the play bar."""
+import subprocess
 import sys
 import threading
 
@@ -15,6 +16,7 @@ from jace.content import import_modpack_file
 from jace.ui.accounts_page import AccountsPage
 from jace.ui.browse_page import BrowsePage
 from jace.ui.common import STYLE, run_task, show_error
+from jace.ui.friends_page import FriendsPage
 from jace.ui.installer import FirstRunDialog, SetupWizard, confirm_uninstall
 from jace.ui.instances_page import InstancesPage
 from jace.ui.settings_page import SettingsPage
@@ -94,9 +96,11 @@ class MainWindow(QMainWindow):
         self.browse = BrowsePage(self)
         self.skins = SkinsPage(self)
         self.accounts_page = AccountsPage()
+        self.friends_page = FriendsPage()
         self.settings_page = SettingsPage()
         for i, (label, page) in enumerate((("🎮  Library", self.library), ("🧩  Browse", self.browse),
                                            ("👕  Skins && Capes", self.skins), ("👤  Accounts", self.accounts_page),
+                                           ("👥  Friends", self.friends_page),
                                            ("⚙  Settings", self.settings_page))):
             b = QPushButton(label)
             b.setObjectName("nav")
@@ -153,6 +157,8 @@ class MainWindow(QMainWindow):
         self.library.import_requested.connect(self.import_modpack)
         self.browse.instance_created.connect(self._instance_created)
         self.accounts_page.changed.connect(self._account_changed)
+        self.friends_page.join_requested.connect(self._join_server)
+        self.friends_page.copy_skin_requested.connect(self._copy_friend_skin)
         self.settings_page.check_updates_requested.connect(lambda: self.check_updates(manual=True))
         if settings.get("auto_update_check") is not False and not updater.unsupported_reason():
             QTimer.singleShot(3000, self.check_updates)
@@ -259,6 +265,21 @@ class MainWindow(QMainWindow):
                                     if inst else "")
         self.play_btn.setEnabled(inst is not None and self.busy == 0)
 
+    def _join_server(self, server):
+        inst = self.library.current()
+        if not inst:
+            QMessageBox.information(self, "Pick an instance", "Select an instance in the Library first, "
+                                    "with a Minecraft version the server supports.")
+            self.go(0)
+            return
+        self.notify(f"Joining {server} with {inst.name}…")
+        self.play(inst, server)
+
+    def _copy_friend_skin(self, url, slim):
+        self.go(2)
+        self.skins.show_preview(url, slim)
+        self.notify("Previewing your friend's skin - click Apply to use it")
+
     def _browse_for(self, inst, kind):
         self.go(1)
         self.browse.open_for(inst, kind)
@@ -287,7 +308,7 @@ class MainWindow(QMainWindow):
         self.run_job(import_modpack_file, "Importing modpack", done, True, path, name=name.strip() or None)
 
     # -- launching
-    def play(self, inst):
+    def play(self, inst, server: str | None = None):
         if inst is None or self.busy:
             return
         acc = accounts.current()
@@ -300,7 +321,7 @@ class MainWindow(QMainWindow):
             account = accounts.ensure_fresh(acc)
             inst.install(callback)
             callback["setStatus"]("Starting Minecraft…")
-            return inst.launch(account)
+            return inst.launch(account, server)
 
         def started(proc):
             self.notify(f"Playing {inst.name}")
@@ -327,8 +348,8 @@ class MainWindow(QMainWindow):
 def should_run_setup(argv) -> bool:
     if "--install" in argv:
         return True
-    return bool(desktop.setup_available() and not desktop.running_installed_copy()
-                and not settings.get("skip_install_prompt"))
+    # The downloaded AppImage / .app / .exe must be installed before it can be used
+    return bool(desktop.setup_available() and not desktop.running_installed_copy())
 
 
 def self_test(app) -> int:
@@ -361,6 +382,19 @@ def self_test(app) -> int:
             f.write("\n".join(results))
     print("\n".join(results))
     return code
+
+
+def start_installed(installed):
+    """Start the freshly installed copy and remove the downloaded one."""
+    if desktop.mac_app_bundle():
+        macinstall.relaunch_installed(installed, desktop.mac_app_bundle())
+    elif wininstall.running_exe():
+        wininstall.relaunch(installed, delete_after=wininstall.running_exe())
+    else:
+        subprocess.Popen([str(installed)], start_new_session=True, env=updater._clean_env())
+        downloaded = desktop.running_appimage()
+        if downloaded and downloaded.resolve() != installed.resolve():
+            downloaded.unlink(missing_ok=True)   # fine on Linux: the running image stays mounted
 
 
 def close_splash():
@@ -418,21 +452,19 @@ def main():
         return
     if should_run_setup(argv):
         wiz = SetupWizard()
-        finished = wiz.exec() == QDialog.DialogCode.Accepted
-        if "--install" in argv and not (finished and wiz.launch_after()):
-            return
+        if wiz.exec() != QDialog.DialogCode.Accepted:
+            return                       # setup cancelled: nothing runs uninstalled
         settings.set("welcomed", True)
-        if finished and not wiz.launch_after():
-            return
         installed = desktop.installed_path()
-        if finished and installed and not desktop.running_installed_copy():
-            # we're the downloaded copy: start the installed app instead and quit
-            if desktop.mac_app_bundle():
-                macinstall.relaunch_installed(installed, desktop.mac_app_bundle())
-                return
-            if wininstall.running_exe():
-                wininstall.relaunch(installed, delete_after=wininstall.running_exe())
-                return
+        if installed and not desktop.running_installed_copy():
+            # we're the downloaded copy: start the installed app (if asked) and quit
+            if wiz.launch_after():
+                start_installed(installed)
+            elif desktop.running_appimage():
+                desktop.running_appimage().unlink(missing_ok=True)
+            return
+        if not wiz.launch_after():
+            return
     elif not settings.get("welcomed"):
         settings.set("welcomed", True)
         if not accounts.accounts:

@@ -210,7 +210,7 @@ class SettingsPage(QWidget):
 
     def _install_app(self):
         from jace.ui.installer import SetupWizard
-        SetupWizard(self).exec()
+        SetupWizard(self, required=False).exec()
         self._update_integ()
 
     def _uninstall_app(self):

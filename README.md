@@ -19,6 +19,7 @@ A desktop launcher for Minecraft: Java Edition, written in Python and Qt (PySide
   - equip any cape you own, or wear none
   - a local skin library you can apply with a double-click
 - **Accounts**: Microsoft sign-in, plus offline accounts for singleplayer and offline-mode servers.
+- **Friends list**: add friends by Minecraft username and see their skin. Save the server they play on to see if they're online there, and click **Join** to launch straight into it. There's no Jace Launcher server, so "online" only works on servers that share their player list.
 - **Game log** window, plus per-instance memory, Java and JVM argument overrides.
 
 ## Running
@@ -54,6 +55,8 @@ git tag v1.0.0 && git push origin v1.0.0
 ```
 
 The first launch on every platform asks you to add your accounts. **Settings → Delete Jace Launcher** works on every platform. On Windows you can also uninstall from **Settings → Apps → Installed apps**.
+
+**Installing is required:** the downloaded AppImage, `.app` and `.exe` only run the setup wizard. Cancelling setup closes the app. After installing, the installed copy starts and the download is removed where possible.
 
 **Updates:** when a new release is published, an **Update to vX** button appears in the bottom bar. You can also use **Settings → Updates → Check for updates**. One click downloads the new version, replaces the installed app and restarts it. Your instances, worlds and accounts are kept.
 

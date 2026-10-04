@@ -39,6 +39,7 @@ class SkinsPage(QWidget):
         self.cape = QImage()
         self.capes: list[dict] = []
         self.profile = None
+        self._hold_preview = False     # keep a skin copied from a friend when the profile loads
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(28, 24, 28, 24)
@@ -180,7 +181,9 @@ class SkinsPage(QWidget):
         self.profile = prof
         self.who.setText(f"Signed in as {prof['name']}")
         active = next((s for s in prof.get("skins", []) if s.get("state") == "ACTIVE"), None)
-        if active:
+        if self._hold_preview:
+            self._hold_preview = False
+        elif active:
             self._load_url(active["url"], active.get("variant", "CLASSIC").upper() == "SLIM", live=True)
         self.capes = prof.get("capes", [])
         self._fill_capes()
@@ -233,6 +236,11 @@ class SkinsPage(QWidget):
         self.front.setPixmap(render_skin(self.skin, slim, back=False))
         self.back.setPixmap(render_skin(self.skin, slim, back=True, cape=self.cape))
         self.apply_btn.setText("Apply skin to account" + ("" if self.skin_is_live else "  •"))
+
+    def show_preview(self, url: str, slim: bool):
+        """Preview someone else's skin (from the Friends page) so it can be applied."""
+        self._hold_preview = True
+        self._load_url(url, slim)
 
     # ------------------------------------------------------------ actions
     def open_file(self):

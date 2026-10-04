@@ -10,7 +10,6 @@ from PySide6.QtWidgets import (QApplication, QCheckBox, QDialog, QFileDialog, QH
 
 from jace import APP_VERSION, desktop, macinstall
 from jace.accounts import accounts
-from jace.config import settings
 from jace.ui.accounts_page import AccountsPage
 from jace.ui.common import run_task
 
@@ -53,8 +52,8 @@ class WelcomePage(QWizardPage):
         row.addWidget(text, 1)
         lay.addLayout(row)
         lay.addStretch()
-        self.never = QCheckBox("Don't show this setup again (just run the launcher)")
-        lay.addWidget(self.never)
+        req = _muted("Jace Launcher needs to be installed before you can use it.")
+        lay.addWidget(req)
 
 
 class AccountsStepPage(QWizardPage):
@@ -221,8 +220,9 @@ class FinishPage(QWizardPage):
 
 
 class SetupWizard(QWizard):
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, required=True):
         super().__init__(parent)
+        self.required = required
         self.setWindowTitle("Jace Launcher Setup")
         self.setWizardStyle(QWizard.WizardStyle.ClassicStyle)
         self.setStyleSheet("QWizard, QWizardPage { background: #16181d; }"
@@ -240,8 +240,11 @@ class SetupWizard(QWizard):
         self.loc.setCommitPage(True)
 
     def reject(self):
-        if self.welcome.never.isChecked():
-            settings.set("skip_install_prompt", True)
+        # Installing is required: cancelling setup quits Jace Launcher
+        if self.required and self.currentPage() is not self.finish and QMessageBox.question(
+                self, "Quit setup?", "Jace Launcher has to be installed before you can use it.\n\n"
+                "Quit setup and close Jace Launcher?") != QMessageBox.StandardButton.Yes:
+            return
         super().reject()
 
     def launch_after(self) -> bool:

@@ -1,4 +1,5 @@
 """Instances: isolated game folders that share the version/library store."""
+import json
 import re
 import shutil
 import subprocess
@@ -59,7 +60,17 @@ class Instance:
         self.data["version_id"] = vid
         self.save()
 
-    def build_command(self, account: dict) -> list[str]:
+    def _supports_quick_play(self) -> bool:
+        """1.20+ joins servers with --quickPlayMultiplayer; older versions use --server."""
+        vid = self.data.get("version_id", "")
+        while vid:
+            data = read_json(GAME_ROOT / "versions" / vid / f"{vid}.json", {})
+            if "quickPlayMultiplayer" in json.dumps(data.get("arguments", {})):
+                return True
+            vid = data.get("inheritsFrom")
+        return False
+
+    def build_command(self, account: dict, server: str | None = None) -> list[str]:
         vid = self.data["version_id"]
         mem = int(self.data.get("memory_mb") or settings.get("memory_mb"))
         jvm = [f"-Xmx{mem}M", f"-Xms{min(int(settings.get('min_memory_mb')), mem)}M"]
@@ -78,14 +89,22 @@ class Instance:
             "resolutionWidth": str(settings.get("window_width")),
             "resolutionHeight": str(settings.get("window_height")),
         }
+        if server:
+            if self._supports_quick_play():
+                options["quickPlayMultiplayer"] = server
+            else:
+                host, _, port = server.partition(":")
+                options["server"] = host
+                if port:
+                    options["port"] = port
         cmd = mll.command.get_minecraft_command(vid, str(GAME_ROOT), options)
         # placeholders the library leaves alone
         xuid = account.get("xuid") or "0"
         return [a.replace("${auth_xuid}", xuid).replace("${clientid}", "0") for a in cmd]
 
-    def launch(self, account: dict) -> subprocess.Popen:
+    def launch(self, account: dict, server: str | None = None) -> subprocess.Popen:
         self.game_dir.mkdir(parents=True, exist_ok=True)
-        cmd = self.build_command(account)
+        cmd = self.build_command(account, server)
         self.data["last_played"] = time.time()
         self.save()
         kwargs = {}
