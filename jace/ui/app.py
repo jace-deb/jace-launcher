@@ -273,6 +273,38 @@ def should_run_setup(argv) -> bool:
                 and not settings.get("skip_install_prompt"))
 
 
+def self_test(app) -> int:
+    """Used by CI on packaged builds: prove the bundle starts (Qt, WebEngine, all pages,
+    bundled assets and the launcher library), then exit. Exit code 0 = OK."""
+    import os
+
+    import minecraft_launcher_lib
+    from PySide6.QtWebEngineWidgets import QWebEngineView
+    results = []
+    try:
+        w = MainWindow()
+        w.show()
+        for i in range(w.stack.count()):
+            w.go(i)
+            app.processEvents()
+        view = QWebEngineView()
+        view.setHtml("<p>ok</p>")
+        app.processEvents()
+        assert desktop.ICON_SRC.is_file(), f"missing icon {desktop.ICON_SRC}"
+        results.append(f"minecraft-launcher-lib {minecraft_launcher_lib.utils.get_library_version()}")
+        results.append("SELF-TEST OK")
+        code = 0
+    except Exception as e:  # noqa: BLE001
+        results.append(f"SELF-TEST FAILED: {e!r}")
+        code = 1
+    out = os.environ.get("JACE_SELF_TEST_OUT")
+    if out:  # windowed Windows builds have no stdout, so CI reads this file
+        with open(out, "w") as f:
+            f.write("\n".join(results))
+    print("\n".join(results))
+    return code
+
+
 def main():
     if desktop.handle_cli(sys.argv[1:]):
         return
@@ -283,6 +315,8 @@ def main():
     app.setStyleSheet(STYLE)
     app.setWindowIcon(QIcon(str(desktop.ICON_SRC)))
     argv = sys.argv[1:]
+    if "--self-test" in argv:
+        sys.exit(self_test(app))
     if "--uninstall-gui" in argv:
         confirm_uninstall()
         return

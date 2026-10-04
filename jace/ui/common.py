@@ -77,20 +77,29 @@ class Task(QRunnable):
         self.signals = _Signals()
         self._max = 0
 
+    def _emit(self, signal, *args):
+        # The app may have quit (destroying the signal object) while we were still
+        # working in the background; there's nobody left to tell, so just stop.
+        try:
+            signal.emit(*args)
+        except RuntimeError:
+            pass
+
     def run(self):
         try:
             if self.use_callback:
                 def set_max(m):
                     self._max = int(m)
-                cb = {"setStatus": lambda s: self.signals.status.emit(str(s)),
-                      "setProgress": lambda v: self.signals.progress.emit(int(v), self._max),
+                cb = {"setStatus": lambda s: self._emit(self.signals.status, str(s)),
+                      "setProgress": lambda v: self._emit(self.signals.progress, int(v), self._max),
                       "setMax": set_max}
                 self.kwargs["callback"] = cb
             result = self.fn(*self.args, **self.kwargs)
-            self.signals.done.emit(result)
         except Exception as e:  # noqa: BLE001 - surface every failure in the UI
             traceback.print_exc()
-            self.signals.failed.emit(str(e) or e.__class__.__name__)
+            self._emit(self.signals.failed, str(e) or e.__class__.__name__)
+            return
+        self._emit(self.signals.done, result)
 
 
 def run_task(fn, *args, on_done=None, on_error=None, on_status=None, on_progress=None,

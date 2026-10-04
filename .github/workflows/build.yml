@@ -16,9 +16,10 @@ permissions:
 jobs:
   windows:
     runs-on: windows-latest
+    timeout-minutes: 40
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - name: Install dependencies
@@ -29,7 +30,16 @@ jobs:
         run: choco install innosetup -y --no-progress
       - name: Build installer
         run: python packaging/build.py
-      - uses: actions/upload-artifact@v4
+      - name: Smoke test (start the packaged app headless)
+        shell: pwsh
+        run: |
+          $env:QT_QPA_PLATFORM = "offscreen"
+          $env:JACE_LAUNCHER_HOME = "$env:RUNNER_TEMP\jace-home"
+          $env:JACE_SELF_TEST_OUT = "$env:RUNNER_TEMP\selftest.txt"
+          $p = Start-Process -FilePath "build\win32\dist\JaceLauncher\JaceLauncher.exe" -ArgumentList "--self-test" -Wait -PassThru
+          Get-Content $env:JACE_SELF_TEST_OUT
+          if ($p.ExitCode -ne 0) { exit 1 }
+      - uses: actions/upload-artifact@v7
         with:
           name: windows
           path: |
@@ -46,9 +56,10 @@ jobs:
           - runner: macos-15-intel     # Intel (x86_64)
             arch: x86_64
     runs-on: ${{ matrix.runner }}
+    timeout-minutes: 40
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - name: Install dependencies
@@ -57,7 +68,12 @@ jobs:
           pip install -r requirements.txt pyinstaller pillow
       - name: Build .dmg
         run: python packaging/build.py
-      - uses: actions/upload-artifact@v4
+      - name: Smoke test (start the packaged app headless)
+        env:
+          QT_QPA_PLATFORM: offscreen
+          JACE_LAUNCHER_HOME: ${{ runner.temp }}/jace-home
+        run: '"build/darwin/dist/Jace Launcher.app/Contents/MacOS/Jace Launcher" --self-test'
+      - uses: actions/upload-artifact@v7
         with:
           name: macos-${{ matrix.arch }}
           path: dist/*.dmg
@@ -65,9 +81,10 @@ jobs:
   linux:
     # older Ubuntu = older glibc = the AppImage runs on more distros
     runs-on: ubuntu-22.04
+    timeout-minutes: 40
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - name: Install system libraries
@@ -81,7 +98,13 @@ jobs:
           .venv/bin/pip install -r requirements.txt
       - name: Build AppImage
         run: ./packaging/build_appimage.sh
-      - uses: actions/upload-artifact@v4
+      - name: Smoke test (start the packaged app headless)
+        env:
+          QT_QPA_PLATFORM: offscreen
+          APPIMAGE_EXTRACT_AND_RUN: "1"
+          JACE_LAUNCHER_HOME: ${{ runner.temp }}/jace-home
+        run: ./dist/JaceLauncher-*-x86_64.AppImage --self-test
+      - uses: actions/upload-artifact@v7
         with:
           name: linux
           path: dist/*.AppImage
@@ -93,11 +116,11 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: artifacts
           merge-multiple: true
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v3
         with:
           files: artifacts/*
           generate_release_notes: true
