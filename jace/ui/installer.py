@@ -8,7 +8,7 @@ from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (QApplication, QCheckBox, QDialog, QFileDialog, QHBoxLayout, QLabel, QLineEdit, QMessageBox,
                                QPlainTextEdit, QPushButton, QVBoxLayout, QWizard, QWizardPage)
 
-from jace import APP_VERSION, desktop
+from jace import APP_VERSION, desktop, macinstall
 from jace.accounts import accounts
 from jace.config import settings
 from jace.ui.accounts_page import AccountsPage
@@ -201,7 +201,9 @@ class FinishPage(QWizardPage):
         a = accounts.current()
         lines.append(f"✓ Signed in as <b>{a['username']}</b>" if a else "No account yet. Add one from the Accounts tab.")
         if IS_MAC:
-            lines.append("<br>You can eject the Jace Launcher disk image now. To uninstall later, use "
+            if macinstall.download_left_behind():
+                lines.append("<br>You can delete the downloaded Jace Launcher from your Downloads folder now.")
+            lines.append("<br>To uninstall later, use "
                          "Settings → Delete Jace Launcher.")
         else:
             lines.append("<br>To uninstall later, right-click Jace Launcher in the applications menu → "

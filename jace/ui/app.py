@@ -330,8 +330,8 @@ def main():
             return
         installed = desktop.installed_path()
         if finished and desktop.mac_app_bundle() and installed and not desktop.running_installed_copy():
-            # we're the copy inside the DMG: start the installed app instead and quit
-            macinstall.relaunch_installed(installed)
+            # we're the downloaded copy: start the installed app instead and quit
+            macinstall.relaunch_installed(installed, desktop.mac_app_bundle())
             return
     elif not settings.get("welcomed"):
         settings.set("welcomed", True)

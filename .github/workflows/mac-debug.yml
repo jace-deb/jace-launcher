@@ -1,4 +1,4 @@
-# Manual diagnostic: install a released .dmg like a user would and open it with a
+# Manual diagnostic: install a released .app.zip like a user would and open it with a
 # real window (not offscreen), then collect output, crash reports and a screenshot.
 name: Mac launch debug
 
@@ -7,7 +7,7 @@ on:
     inputs:
       tag:
         description: Release tag to test
-        default: v1.0.0
+        default: v1.0.3
 
 jobs:
   launch:
@@ -24,12 +24,10 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
-      - name: Download and install the DMG
+      - name: Download and install the app
         run: |
-          gh release download "${{ inputs.tag }}" -R "${{ github.repository }}" -p "*macos-${{ matrix.arch }}.dmg"
-          hdiutil attach -nobrowse -mountpoint /tmp/jl *.dmg
-          ditto "/tmp/jl/Jace Launcher.app" "/Applications/Jace Launcher.app"
-          hdiutil detach /tmp/jl
+          gh release download "${{ inputs.tag }}" -R "${{ github.repository }}" -p "*macos-${{ matrix.arch }}.app.zip"
+          ditto -x -k *.app.zip /Applications
           codesign -dv --verbose=2 "/Applications/Jace Launcher.app" 2>&1 || true
           codesign --verify --deep --strict --verbose=2 "/Applications/Jace Launcher.app" 2>&1 || true
       - name: Run the binary directly (real window)

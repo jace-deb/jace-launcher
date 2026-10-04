@@ -1,4 +1,4 @@
-"""macOS self-installer: copies Jace Launcher.app out of the DMG (or Downloads)
+"""macOS self-installer: copies Jace Launcher.app out of Downloads (or wherever it was opened)
 into an Applications folder and optionally adds it to the Dock, the Desktop and
 the Terminal. Used by the setup wizard and by Settings → Delete Jace Launcher.
 """
@@ -15,7 +15,6 @@ HOME = Path.home()
 SYSTEM_APPS = Path("/Applications")
 USER_APPS = HOME / "Applications"
 DESKTOP_LINK = HOME / "Desktop" / "Jace Launcher"
-DMG_VOLUME = Path("/Volumes/Jace Launcher")
 LSREGISTER = ("/System/Library/Frameworks/CoreServices.framework/Frameworks/"
               "LaunchServices.framework/Support/lsregister")
 
@@ -151,12 +150,21 @@ def install(target_dir: Path, options: dict, status=print) -> tuple[Path, list[s
     return dst, parts
 
 
-def relaunch_installed(app: Path):
-    """Start the installed copy, then (after we quit) eject the DMG if it's mounted."""
+def relaunch_installed(app: Path, downloaded: Path | None = None):
+    """Start the installed copy. Then, once we've quit, delete the downloaded copy we
+    were running from (e.g. ~/Downloads/Jace Launcher.app) so only one copy is left.
+    Gatekeeper's translocated copy hides the real download location, so in that case
+    the download is left for the user to delete."""
     subprocess.Popen(["open", "-n", str(app)])
-    if DMG_VOLUME.exists():
-        subprocess.Popen(["/bin/sh", "-c", 'sleep 4; hdiutil detach -quiet "$0"', str(DMG_VOLUME)],
-                         start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    if (downloaded and downloaded.suffix == ".app" and downloaded.resolve() != app.resolve()
+            and not translocated(downloaded) and not str(downloaded).startswith("/Volumes/")):
+        subprocess.Popen(["/bin/sh", "-c", 'sleep 4; rm -rf "$0"', str(downloaded)], start_new_session=True,
+                         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+def download_left_behind() -> bool:
+    app = running_bundle()
+    return bool(app and translocated(app))
 
 
 def uninstall(app: Path | None):

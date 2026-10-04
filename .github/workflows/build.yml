@@ -67,7 +67,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt pyinstaller pillow "PySide6>=6.9,<6.10"
-      - name: Build .dmg
+      - name: Build .app
         run: python packaging/build.py
       - name: Smoke test (start the packaged app headless)
         env:
@@ -79,17 +79,17 @@ jobs:
           MIN=$(/usr/libexec/PlistBuddy -c "Print LSMinimumSystemVersion" "build/darwin/dist/Jace Launcher.app/Contents/Info.plist")
           echo "LSMinimumSystemVersion = $MIN"
           [ "${MIN%%.*}" -le 12 ] || { echo "::error::Build needs macOS $MIN; must run on macOS 12"; exit 1; }
-      - name: Test the Mac installer (install from a downloaded DMG, then uninstall)
+      - name: Test the Mac installer (install from a downloaded .app, then uninstall)
         env:
           JACE_LAUNCHER_HOME: ${{ runner.temp }}/jace-home-install
         run: |
           set -x
-          DMG=$(ls dist/*.dmg)
-          # mark the DMG as downloaded from the internet, like a browser does
-          xattr -w com.apple.quarantine "0081;$(printf %x $(date +%s));Safari;" "$DMG"
-          hdiutil attach -nobrowse "$DMG"
-          "/Volumes/Jace Launcher/Jace Launcher.app/Contents/MacOS/Jace Launcher" --install --yes
-          hdiutil detach "/Volumes/Jace Launcher"
+          DL="$RUNNER_TEMP/Downloads"
+          mkdir -p "$DL"
+          # unzip like Safari does, and mark it as downloaded from the internet
+          ditto -x -k dist/*.app.zip "$DL"
+          xattr -w com.apple.quarantine "0081;$(printf %x $(date +%s));Safari;" "$DL/Jace Launcher.app"
+          "$DL/Jace Launcher.app/Contents/MacOS/Jace Launcher" --install --yes
           APP="/Applications/Jace Launcher.app"
           test -d "$APP"
           test -L "$HOME/Desktop/Jace Launcher"
@@ -105,7 +105,7 @@ jobs:
       - uses: actions/upload-artifact@v7
         with:
           name: macos-${{ matrix.arch }}
-          path: dist/*.dmg
+          path: dist/*.app.zip
 
   linux:
     # older Ubuntu = older glibc = the AppImage runs on more distros

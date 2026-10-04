@@ -265,7 +265,7 @@ def mac_app_bundle() -> Path | None:
 
 def _mac_apps_to_delete() -> list[Path]:
     """The installed .app plus the copy we're running from, if that's a separate
-    deletable copy (not the read-only DMG or Gatekeeper's translocated copy)."""
+    deletable copy (not a read-only disk image or Gatekeeper's translocated copy)."""
     apps = []
     for app in (installed_path(), mac_app_bundle()):
         if (app and app.suffix == ".app" and app not in apps and not macinstall.translocated(app)

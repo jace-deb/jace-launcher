@@ -4,7 +4,7 @@
 
   Windows -> dist/JaceLauncher-<ver>-windows-x64-setup.exe  (Inno Setup installer)
              dist/JaceLauncher-<ver>-windows-x64-portable.zip
-  macOS   -> dist/JaceLauncher-<ver>-macos-<arch>.dmg         (drag to Applications)
+  macOS   -> dist/JaceLauncher-<ver>-macos-<arch>.app.zip     (unzips to Jace Launcher.app)
   Linux   -> use packaging/build_appimage.sh
 
 PyInstaller can't cross-compile, so the Windows and macOS builds run on
@@ -112,16 +112,13 @@ def build_macos():
     # but required for the app to run at all on Apple Silicon)
     run(["codesign", "--force", "--deep", "--sign", "-", app])
 
-    stage = BUILD / "dmg"
-    shutil.rmtree(stage, ignore_errors=True)
-    stage.mkdir(parents=True)
-    run(["ditto", app, stage / app.name])
-    (stage / "Applications").symlink_to("/Applications")
+    # A .app is a folder, so it's shipped zipped; Safari unzips downloads automatically,
+    # leaving "Jace Launcher.app" in Downloads. ditto keeps symlinks and the signature.
     DIST.mkdir(exist_ok=True)
-    dmg = DIST / f"JaceLauncher-{APP_VERSION}-macos-{arch}.dmg"
-    dmg.unlink(missing_ok=True)
-    run(["hdiutil", "create", "-volname", "Jace Launcher", "-srcfolder", stage, "-ov", "-format", "UDZO", dmg])
-    print("Built", dmg)
+    archive = DIST / f"JaceLauncher-{APP_VERSION}-macos-{arch}.app.zip"
+    archive.unlink(missing_ok=True)
+    run(["ditto", "-c", "-k", "--sequesterRsrc", "--keepParent", app, archive])
+    print("Built", archive)
 
 
 if __name__ == "__main__":
