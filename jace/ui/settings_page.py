@@ -2,10 +2,11 @@
 import os
 import subprocess
 import sys
+from pathlib import Path
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (QCheckBox, QComboBox, QFileDialog, QFormLayout, QGroupBox, QHBoxLayout, QLabel,
-                               QLineEdit, QPushButton, QScrollArea, QSizePolicy, QSpinBox, QVBoxLayout, QWidget)
+                               QLineEdit, QMessageBox, QPushButton, QScrollArea, QSizePolicy, QSpinBox, QVBoxLayout, QWidget)
 
 from jace import desktop
 from jace.config import DATA_DIR, settings
@@ -145,6 +146,34 @@ class SettingsPage(QWidget):
         f.addWidget(cb)
         lay.addWidget(g)
 
+        # --- Synced folders
+        from jace import sync
+        g = QGroupBox("Synced folders")
+        f = QVBoxLayout(g)
+        f.addWidget(self._muted("Instances can share worlds, resource packs, shaders, screenshots and schematics "
+                                "(each instance's Sync tab). Put the shared folder inside Dropbox, OneDrive or "
+                                "Google Drive to also sync them between computers."))
+        row = QHBoxLayout()
+        self.sync_dir = self._path_label(str(sync.shared_root()))
+        row.addWidget(self.sync_dir, 1)
+        ch = QPushButton("Change…")
+        ch.clicked.connect(self._change_sync_dir)
+        op = QPushButton("Open")
+        op.clicked.connect(lambda: open_folder(sync.shared_root()))
+        row.addWidget(ch)
+        row.addWidget(op)
+        f.addLayout(row)
+        f.addWidget(QLabel("Sync these in new instances:"))
+        drow = QHBoxLayout()
+        for folder, label in sync.FOLDERS.items():
+            cb = QCheckBox(label)
+            cb.setChecked(folder in sync.default_folders())
+            cb.toggled.connect(lambda on, fo=folder: self._set_sync_default(fo, on))
+            drow.addWidget(cb)
+        drow.addStretch()
+        f.addLayout(drow)
+        lay.addWidget(g)
+
         # --- Storage
         g = QGroupBox("Storage")
         f = QHBoxLayout(g)
@@ -202,6 +231,34 @@ class SettingsPage(QWidget):
         lab.setObjectName("muted")
         lab.setWordWrap(True)
         return lab
+
+    def _set_sync_default(self, folder, on):
+        from jace import sync
+        cur = set(sync.default_folders())
+        cur.add(folder) if on else cur.discard(folder)
+        settings.set("sync_defaults", [f for f in sync.FOLDERS if f in cur])
+
+    def _change_sync_dir(self):
+        from jace import sync
+        from jace.instances import list_instances
+        from jace.ui.common import run_task
+        d = QFileDialog.getExistingDirectory(self, "Choose where synced folders are stored", str(sync.shared_root()))
+        if not d:
+            return
+        target = Path(d) / "Jace Launcher Sync"
+        if QMessageBox.question(self, "Move synced folders", f"Move all synced worlds, packs and screenshots to\n"
+                                f"{target}?") != QMessageBox.StandardButton.Yes:
+            return
+        self.sync_dir.setText("Moving…")
+
+        def done(_):
+            self.sync_dir.setText(str(sync.shared_root()))
+            self.sync_dir.setToolTip(str(sync.shared_root()))
+
+        def fail(msg):
+            self.sync_dir.setText(str(sync.shared_root()))
+            QMessageBox.critical(self, "Couldn't move synced folders", msg)
+        run_task(sync.move_shared_root, target, list_instances(), lambda s: None, on_done=done, on_error=fail)
 
     def _update_integ(self):
         p = desktop.installed_path()

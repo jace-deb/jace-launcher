@@ -8,7 +8,7 @@ from PySide6.QtWidgets import (QCheckBox, QComboBox, QDialog, QDialogButtonBox, 
                                QHBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem, QMenu, QMessageBox,
                                QPushButton, QSpinBox, QTabWidget, QVBoxLayout, QWidget)
 
-from jace import content, shortcuts
+from jace import content, shortcuts, sync
 from jace.config import settings
 from jace.instance_icons import icon_image
 from jace.instances import Instance, create_instance, list_instances
@@ -292,6 +292,68 @@ class ContentTab(QWidget):
             self.refresh()
 
 
+class SyncTab(QWidget):
+    """Choose which folders this instance shares with other instances."""
+
+    def __init__(self, inst: Instance):
+        super().__init__()
+        self.inst = inst
+        lay = QVBoxLayout(self)
+        intro = QLabel("Synced folders are shared with every instance that syncs them - add a resource pack "
+                       "once and it's everywhere. Change where they're stored (e.g. a Dropbox folder, to sync "
+                       "between computers) in Settings → Synced folders.")
+        intro.setWordWrap(True)
+        intro.setObjectName("muted")
+        lay.addWidget(intro)
+        self.boxes = {}
+        for folder, label in sync.FOLDERS.items():
+            cb = QCheckBox(label)
+            cb.setChecked(sync.is_synced(inst, folder))
+            cb.toggled.connect(lambda on, f=folder, c=cb: self._toggle(f, on, c))
+            self.boxes[folder] = cb
+            lay.addWidget(cb)
+        warn = QLabel("⚠ Worlds: opening a world in an older Minecraft version than it was last played in can "
+                      "damage it. Only sync worlds between instances of the same version.")
+        warn.setWordWrap(True)
+        warn.setStyleSheet("color:#e0b44a;")
+        lay.addWidget(warn)
+        self.where = QLabel()
+        self.where.setObjectName("muted")
+        self.where.setWordWrap(True)
+        lay.addWidget(self.where)
+        lay.addStretch()
+        self._update_where()
+
+    def _update_where(self):
+        self.where.setText(f"Shared folder: {sync.shared_root()}")
+
+    def _toggle(self, folder, on, cb):
+        label = sync.FOLDERS[folder].lower()
+        try:
+            if on:
+                local = self.inst.game_dir / folder
+                n = len(list(local.iterdir())) if local.is_dir() and not sync.is_synced(self.inst, folder) else 0
+                if n and QMessageBox.question(
+                        self, "Sync folder", f"This instance has {n} item(s) in {label}. They'll be moved into the "
+                        "shared folder so all synced instances can use them (nothing is overwritten - "
+                        "clashing names get the instance name added).\n\nContinue?") != QMessageBox.StandardButton.Yes:
+                    cb.blockSignals(True)
+                    cb.setChecked(False)
+                    cb.blockSignals(False)
+                    return
+                sync.enable(self.inst, folder)
+            else:
+                n = sync.disable(self.inst, folder)
+                if n:
+                    QMessageBox.information(self, "Stopped syncing", f"This instance kept its own copy of the "
+                                            f"{n} shared item(s) in {label}.")
+        except OSError as e:
+            show_error(self, str(e), "Couldn't change syncing")
+            cb.blockSignals(True)
+            cb.setChecked(sync.is_synced(self.inst, folder))
+            cb.blockSignals(False)
+
+
 class InstanceDialog(QDialog):
     def __init__(self, inst: Instance, browse_cb, parent=None):
         super().__init__(parent)
@@ -375,6 +437,7 @@ class InstanceDialog(QDialog):
         save.setObjectName("primary")
         save.clicked.connect(self._save)
         f.addRow("", save)
+        tabs.addTab(SyncTab(inst), "Sync")
         tabs.addTab(w, "Settings")
 
     def _browse(self, cb):

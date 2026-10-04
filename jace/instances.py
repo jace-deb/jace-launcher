@@ -140,8 +140,9 @@ class Instance:
         return sorted((p for p in d.iterdir() if p.is_file() or kind != "mod"), key=lambda p: p.name.lower())
 
     def delete(self):
-        from jace import shortcuts
+        from jace import shortcuts, sync
         shortcuts.remove(self)
+        sync.unlink_all(self)        # never follow a synced folder into the shared files
         shutil.rmtree(self.folder)
 
 
@@ -163,4 +164,7 @@ def create_instance(name: str, mc_version: str, loader: str = "vanilla", loader_
                  "loader_version": loader_version, "created": time.time(), **(extra or {})}
     inst.save()
     inst.game_dir.mkdir(parents=True, exist_ok=True)
+    if "modpack" not in inst.data:   # a modpack's own resource packs shouldn't spill into other instances
+        from jace import sync
+        sync.apply_defaults(inst)
     return inst
