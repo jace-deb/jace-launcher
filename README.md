@@ -44,8 +44,8 @@ GitHub Actions builds every platform, because PyInstaller can't build Windows or
 |---|---|---|
 | Windows 10/11 | `JaceLauncher-<ver>-windows-x64-setup.exe` | Setup wizard: choose the folder, desktop shortcut and Start menu entry. Includes an uninstaller. |
 | Windows | `…-windows-x64-portable.zip` | Unzip and run `JaceLauncher.exe`. |
-| macOS (Apple Silicon) | `JaceLauncher-<ver>-macos-arm64.dmg` | Open it and drag Jace Launcher into Applications. |
-| macOS (Intel) | `JaceLauncher-<ver>-macos-x86_64.dmg` | Same as above. |
+| macOS 12+ (Apple Silicon) | `JaceLauncher-<ver>-macos-arm64.dmg` | Open it and drag Jace Launcher into Applications. |
+| macOS 12+ (Intel) | `JaceLauncher-<ver>-macos-x86_64.dmg` | Same as above. |
 | Linux | `JaceLauncher-<ver>-x86_64.AppImage` | Run it; the setup wizard does the rest (see below). |
 
 Every push to `main` builds all of these; download them from the run's **Artifacts**. Pushing a version tag also publishes a GitHub Release:

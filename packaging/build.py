@@ -63,6 +63,32 @@ def build_windows():
     print("Built", DIST / f"{base}-setup.exe")
 
 
+def macos_min_version(app: Path) -> str:
+    """Highest LC_BUILD_VERSION 'minos' among the app's key binaries, i.e. the oldest
+    macOS this bundle can really run on. Used for LSMinimumSystemVersion so older Macs
+    get a clear "needs a newer macOS" message instead of a silent crash at launch."""
+    binaries = [p for pat in ("Contents/MacOS/*", "**/QtCore.framework/Versions/A/QtCore",
+                              "**/QtWebEngineCore.framework/Versions/A/QtWebEngineCore", "**/libpython3*.dylib",
+                              "**/Python.framework/Versions/*/Python")
+                for p in app.glob(pat) if p.is_file()]
+    found = []
+    for b in binaries:
+        out = subprocess.run(["otool", "-l", str(b)], capture_output=True, text=True).stdout
+        lines = out.splitlines()
+        for i, line in enumerate(lines):
+            if "LC_BUILD_VERSION" in line or "LC_VERSION_MIN_MACOSX" in line:
+                for nxt in lines[i + 1:i + 6]:
+                    parts = nxt.split()
+                    if parts and parts[0] in ("minos", "version"):
+                        found.append((tuple(int(x) for x in parts[1].split(".")), b.name))
+                        break
+    if not found:
+        sys.exit("Couldn't determine the minimum macOS version of the build")
+    ver, name = max(found)
+    print(f"Minimum macOS: {'.'.join(map(str, ver))} (from {name})")
+    return ".".join(map(str, ver))
+
+
 def build_macos():
     arch = "arm64" if platform.machine() == "arm64" else "x86_64"
     out = pyinstaller("Jace Launcher", ASSETS / "icon.icns",
@@ -78,7 +104,7 @@ def build_macos():
         "CFBundleVersion": APP_VERSION,
         "LSApplicationCategoryType": "public.app-category.games",
         "NSHighResolutionCapable": True,
-        "LSMinimumSystemVersion": "12.0",
+        "LSMinimumSystemVersion": macos_min_version(app),
     })
     with open(info, "wb") as f:
         plistlib.dump(plist, f)
