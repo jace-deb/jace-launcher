@@ -2,13 +2,13 @@
 import sys
 import threading
 
-from PySide6.QtCore import Signal
+from PySide6.QtCore import QTimer, Signal
 from PySide6.QtGui import QFont, QIcon, QTextCursor
 from PySide6.QtWidgets import (QApplication, QButtonGroup, QDialog, QFileDialog, QHBoxLayout, QInputDialog, QLabel,
                                QMainWindow, QMessageBox, QPlainTextEdit, QProgressBar, QPushButton, QStackedWidget,
                                QVBoxLayout, QWidget)
 
-from jace import APP_NAME, APP_VERSION, desktop, macinstall
+from jace import APP_NAME, APP_VERSION, desktop, macinstall, updater, wininstall
 from jace.accounts import accounts
 from jace.config import settings
 from jace.content import import_modpack_file
@@ -134,6 +134,12 @@ class MainWindow(QMainWindow):
         bl.addLayout(info, 1)
         self.selected_label = QLabel("")
         bl.addWidget(self.selected_label)
+        self.update_btn = QPushButton()
+        self.update_btn.setObjectName("primary")
+        self.update_btn.hide()
+        self.update_btn.clicked.connect(lambda: self.start_update(self.update_info))
+        bl.addWidget(self.update_btn)
+        self.update_info = None
         self.play_btn = QPushButton("PLAY")
         self.play_btn.setObjectName("play")
         self.play_btn.clicked.connect(lambda: self.play(self.library.current()))
@@ -147,6 +153,9 @@ class MainWindow(QMainWindow):
         self.library.import_requested.connect(self.import_modpack)
         self.browse.instance_created.connect(self._instance_created)
         self.accounts_page.changed.connect(self._account_changed)
+        self.settings_page.check_updates_requested.connect(lambda: self.check_updates(manual=True))
+        if settings.get("auto_update_check") is not False and not updater.unsupported_reason():
+            QTimer.singleShot(3000, self.check_updates)
         self._account_changed()
         self._selection_changed(self.library.current())
 
@@ -169,6 +178,7 @@ class MainWindow(QMainWindow):
             self.busy -= 1
             if self.busy == 0:
                 self.progress.hide()
+                self.update_btn.setEnabled(True)
                 self.play_btn.setEnabled(self.library.current() is not None)
 
         def done(res):
@@ -189,6 +199,54 @@ class MainWindow(QMainWindow):
 
         run_task(fn, *args, on_done=done, on_error=fail, on_status=self.status.setText,
                  on_progress=prog, use_callback=use_callback, **kwargs)
+
+    # -- updates
+    def check_updates(self, manual=False):
+        reason = updater.unsupported_reason()
+        if reason and manual:
+            QMessageBox.information(self, "Updates", reason)
+            return
+        if manual:
+            self.notify("Checking for updates…")
+
+        def done(info):
+            if info:
+                self.update_info = info
+                self.update_btn.setText(f"⬆  Update to {info['version']}")
+                self.update_btn.show()
+                self.notify(f"Jace Launcher {info['version']} is available")
+                if manual:
+                    self.start_update(info)
+            elif manual:
+                self.notify("Up to date")
+                QMessageBox.information(self, "Updates", f"You have the latest version ({updater.current_version()}).")
+
+        def fail(msg):
+            if manual:
+                show_error(self, f"Couldn't check for updates: {msg}")
+        run_task(updater.check, on_done=done, on_error=fail)
+
+    def start_update(self, info):
+        if not info or self.busy:
+            return
+        box = QMessageBox(self)
+        box.setWindowTitle("Update Jace Launcher")
+        box.setText(f"<b>Update to Jace Launcher {info['version']}?</b><br>"
+                    f"You have {updater.current_version()}. The app restarts when the update is ready. "
+                    "Your instances, worlds and accounts are kept.")
+        if info.get("notes"):
+            box.setDetailedText(info["notes"])
+        go = box.addButton("Update now", QMessageBox.ButtonRole.AcceptRole)
+        box.addButton("Later", QMessageBox.ButtonRole.RejectRole)
+        box.exec()
+        if box.clickedButton() is not go:
+            return
+        self.update_btn.setEnabled(False)
+
+        def done(_):
+            self.notify("Restarting…")
+            QApplication.quit()
+        self.run_job(updater.apply, f"Updating to {info['version']}", done, True, info)
 
     # -- state
     def _account_changed(self):
@@ -305,7 +363,42 @@ def self_test(app) -> int:
     return code
 
 
+def close_splash():
+    """Close the PyInstaller splash screen (Windows setup .exe) if there is one."""
+    import os
+    if "_PYI_SPLASH_IPC" not in os.environ:   # only the Windows setup .exe has a splash
+        return
+    try:
+        import pyi_splash
+        pyi_splash.close()
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def run_windows_update(argv) -> None:
+    """Small progress window shown by the new setup .exe while it updates the app."""
+    dlg = QDialog()
+    dlg.setWindowTitle("Updating Jace Launcher")
+    dlg.setMinimumWidth(420)
+    lay = QVBoxLayout(dlg)
+    lay.addWidget(QLabel(f"<b>Updating Jace Launcher to {APP_VERSION}</b>"))
+    label = QLabel("Starting…")
+    label.setObjectName("muted")
+    bar = QProgressBar()
+    bar.setRange(0, 0)
+    lay.addWidget(label)
+    lay.addWidget(bar)
+
+    def fail(msg):
+        show_error(dlg, msg, "Update failed")
+        dlg.reject()
+    run_task(lambda callback: desktop.apply_windows_update(argv, callback["setStatus"]), use_callback=True,
+             on_status=label.setText, on_done=lambda _: dlg.accept(), on_error=fail)
+    dlg.exec()
+
+
 def main():
+    close_splash()
     if desktop.handle_cli(sys.argv[1:]):
         return
     QApplication.setApplicationName(APP_NAME)
@@ -320,6 +413,9 @@ def main():
     if "--uninstall-gui" in argv:
         confirm_uninstall()
         return
+    if "--apply-update" in argv:
+        run_windows_update(argv)
+        return
     if should_run_setup(argv):
         wiz = SetupWizard()
         finished = wiz.exec() == QDialog.DialogCode.Accepted
@@ -329,10 +425,14 @@ def main():
         if finished and not wiz.launch_after():
             return
         installed = desktop.installed_path()
-        if finished and desktop.mac_app_bundle() and installed and not desktop.running_installed_copy():
+        if finished and installed and not desktop.running_installed_copy():
             # we're the downloaded copy: start the installed app instead and quit
-            macinstall.relaunch_installed(installed, desktop.mac_app_bundle())
-            return
+            if desktop.mac_app_bundle():
+                macinstall.relaunch_installed(installed, desktop.mac_app_bundle())
+                return
+            if wininstall.running_exe():
+                wininstall.relaunch(installed, delete_after=wininstall.running_exe())
+                return
     elif not settings.get("welcomed"):
         settings.set("welcomed", True)
         if not accounts.accounts:

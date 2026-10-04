@@ -16,6 +16,7 @@ from jace.ui.common import run_task
 
 
 IS_MAC = sys.platform == "darwin"
+IS_WIN = sys.platform == "win32"
 
 
 def _muted(text):
@@ -42,6 +43,8 @@ class WelcomePage(QWizardPage):
             "<li>choose where to install Jace Launcher</li>"
             + ("<li>add it to the Dock, Launchpad and your desktop</li>"
                "<li>stop macOS from warning that the app is \"damaged\"</li></ul>" if IS_MAC else
+               "<li>add it to the Start menu and your desktop</li>"
+               "<li>list it in Windows \"Installed apps\" so it's easy to uninstall</li></ul>" if IS_WIN else
                "<li>add it to your applications menu and desktop</li>"
                "<li>register it with GNOME Software and other app centers</li></ul>")
             + ("<p>A version is already installed; it will be replaced. Your instances, worlds and accounts "
@@ -99,6 +102,9 @@ class LocationPage(QWizardPage):
             lay.addWidget(_muted(
                 "Mac apps normally live in Applications. macOS may ask permission to let Jace Launcher update "
                 "the Dock or your Desktop - click OK."))
+        elif IS_WIN:
+            lay.addWidget(_muted(
+                "The default folder is just for you and doesn't need administrator rights."))
         else:
             lay.addWidget(_muted(
                 "App centers list apps using AppStream info; this adds Jace Launcher's description, icon and "
@@ -196,7 +202,7 @@ class FinishPage(QWizardPage):
         parts = desktop.install_record().get("parts", [])
         lines = [f"Installed to <b>{self.install.result_path}</b>"]
         lines += [f"✓ {desktop.PART_DESCRIPTIONS[p]}" for p in parts if p in desktop.PART_DESCRIPTIONS]
-        if "desktop" in parts and not IS_MAC:
+        if "desktop" in parts and not (IS_MAC or IS_WIN):
             lines.append("(on GNOME you may need the Desktop Icons extension to see desktop shortcuts)")
         a = accounts.current()
         lines.append(f"✓ Signed in as <b>{a['username']}</b>" if a else "No account yet. Add one from the Accounts tab.")
@@ -205,6 +211,9 @@ class FinishPage(QWizardPage):
                 lines.append("<br>You can delete the downloaded Jace Launcher from your Downloads folder now.")
             lines.append("<br>To uninstall later, use "
                          "Settings → Delete Jace Launcher.")
+        elif IS_WIN:
+            lines.append("<br>The downloaded setup file is removed automatically. To uninstall later, use "
+                         "Settings → Delete Jace Launcher, or Windows Settings → Apps → Installed apps.")
         else:
             lines.append("<br>To uninstall later, right-click Jace Launcher in the applications menu → "
                          "<i>Uninstall Jace Launcher</i>, or use Settings → Delete Jace Launcher.")

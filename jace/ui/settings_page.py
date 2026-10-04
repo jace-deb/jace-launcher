@@ -3,7 +3,7 @@ import os
 import subprocess
 import sys
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (QCheckBox, QComboBox, QFileDialog, QFormLayout, QGroupBox, QHBoxLayout, QLabel,
                                QLineEdit, QPushButton, QScrollArea, QSizePolicy, QSpinBox, QVBoxLayout, QWidget)
 
@@ -44,6 +44,8 @@ def open_folder(path):
 
 
 class SettingsPage(QWidget):
+    check_updates_requested = Signal()
+
     def __init__(self):
         super().__init__()
         self.setObjectName("page")
@@ -125,6 +127,22 @@ class SettingsPage(QWidget):
         self.azure.setPlaceholderText("Optional - leave empty to use the default sign-in")
         f.addRow("Azure client ID", self.azure)
         f.addRow("", self._muted("Only needed if you registered your own Azure app for Microsoft login."))
+        lay.addWidget(g)
+
+        # --- Updates
+        g = QGroupBox("Updates")
+        f = QHBoxLayout(g)
+        from jace import updater
+        why = updater.unsupported_reason()
+        f.addWidget(self._muted(f"You have Jace Launcher {updater.current_version()}." + (f"  {why}" if why else "")), 1)
+        auto = QCheckBox("Check on startup")
+        auto.setChecked(settings.get("auto_update_check") is not False)
+        auto.toggled.connect(lambda on: settings.set("auto_update_check", on))
+        auto.setEnabled(why is None)
+        f.addWidget(auto)
+        cb = QPushButton("Check for updates")
+        cb.clicked.connect(self.check_updates_requested.emit)
+        f.addWidget(cb)
         lay.addWidget(g)
 
         # --- Storage

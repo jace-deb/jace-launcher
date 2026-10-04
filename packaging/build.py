@@ -2,8 +2,7 @@
 
     python packaging/build.py
 
-  Windows -> dist/JaceLauncher-<ver>-windows-x64-setup.exe  (Inno Setup installer)
-             dist/JaceLauncher-<ver>-windows-x64-portable.zip
+  Windows -> dist/JaceLauncher-<ver>-windows-x64.exe          (self-installing, setup wizard)
   macOS   -> dist/JaceLauncher-<ver>-macos-<arch>.app.zip     (unzips to Jace Launcher.app)
   Linux   -> use packaging/build_appimage.sh
 
@@ -47,20 +46,25 @@ def pyinstaller(name: str, icon: Path, extra=()):
 
 
 def build_windows():
-    out = pyinstaller("JaceLauncher", ASSETS / "icon.ico")
+    """One self-installing .exe: a onefile build that also carries a small onedir
+    launcher, which the setup wizard installs next to the unpacked app files."""
+    from PIL import Image
+    onedir = pyinstaller("JaceLauncher", ASSETS / "icon.ico")
+    launcher = onedir / "JaceLauncher" / "JaceLauncher.exe"
+    keep = ROOT / "build" / "win-launcher"
+    shutil.rmtree(keep, ignore_errors=True)
+    keep.mkdir(parents=True)
+    shutil.copy2(launcher, keep / "JaceLauncher.exe")
+
+    splash = ROOT / "build" / "splash.png"
+    Image.open(ASSETS / "icon.png").convert("RGBA").resize((256, 256), Image.NEAREST).save(splash)
+    out = pyinstaller("JaceLauncher", ASSETS / "icon.ico",
+                      ["--onefile", "--splash", splash,
+                       "--add-data", f"{keep / 'JaceLauncher.exe'}{os.pathsep}jace_setup"])
     DIST.mkdir(exist_ok=True)
-    base = f"JaceLauncher-{APP_VERSION}-windows-x64"
-
-    portable = shutil.make_archive(str(DIST / f"{base}-portable"), "zip", out, "JaceLauncher")
-    print("Built", portable)
-
-    iscc = shutil.which("iscc") or r"C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
-    if not Path(iscc).exists():
-        sys.exit("Inno Setup (iscc) not found - install it from https://jrsoftware.org/isinfo.php")
-    run([iscc, f"/DAppVersion={APP_VERSION}", f"/DSourceDir={out / 'JaceLauncher'}",
-         f"/DOutputDir={DIST}", f"/DOutputName={base}-setup", f"/DIconFile={ASSETS / 'icon.ico'}",
-         ROOT / "packaging" / "windows" / "installer.iss"])
-    print("Built", DIST / f"{base}-setup.exe")
+    final = DIST / f"JaceLauncher-{APP_VERSION}-windows-x64.exe"
+    shutil.copy2(out / "JaceLauncher.exe", final)
+    print("Built", final)
 
 
 def macos_min_version(app: Path) -> str:

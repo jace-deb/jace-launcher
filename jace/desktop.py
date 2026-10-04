@@ -15,7 +15,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from jace import APP_RELEASE_DATE, APP_VERSION, macinstall
+from jace import APP_RELEASE_DATE, APP_VERSION, macinstall, wininstall
 from jace.config import DATA_DIR, read_json, write_json
 
 APP_ID = "io.github.jacelauncher.JaceLauncher"
@@ -71,8 +71,8 @@ def running_installed_copy() -> bool:
 
 
 def running_package() -> Path | None:
-    """The self-installable thing we're running from: an AppImage file or a macOS .app."""
-    return running_appimage() or macinstall.running_bundle()
+    """The self-installable thing we're running from: an AppImage, a macOS .app or a Windows .exe."""
+    return running_appimage() or macinstall.running_bundle() or wininstall.running_exe()
 
 
 def setup_available() -> bool:
@@ -80,11 +80,15 @@ def setup_available() -> bool:
 
 
 def default_install_dir() -> Path:
+    if wininstall.running_exe():
+        return wininstall.default_dir()
     return macinstall.default_dir() if macinstall.running_bundle() else DEFAULT_DIR
 
 
 def install_options() -> list[tuple[str, str, bool]]:
     """(key, label, checked by default) for the wizard's shortcut checkboxes."""
+    if wininstall.running_exe():
+        return wininstall.OPTIONS
     if macinstall.running_bundle():
         return macinstall.OPTIONS
     return [("menu", "Add to the applications menu", True),
@@ -101,13 +105,16 @@ PART_DESCRIPTIONS = {
     "terminal": "Run  jace-launcher  from a terminal",
     "appstream": "App center info registered",
     "unquarantine": "Removed the downloaded-from-internet flag",
+    "startmenu": "Added to the Start menu",
+    "apps": "Listed in Windows \"Installed apps\"",
 }
 
 
 def install_app(target_dir: Path, options: dict, status=print) -> Path:
     """Install on whichever platform we're running; returns the installed path."""
-    if macinstall.running_bundle():
-        path, parts = macinstall.install(target_dir, options, status)
+    if wininstall.running_exe() or macinstall.running_bundle():
+        mod = wininstall if wininstall.running_exe() else macinstall
+        path, parts = mod.install(target_dir, options, status)
         write_json(RECORD, {"path": str(path), "version": APP_VERSION, "parts": parts})
         return path
     return install(target_dir, status=status, **{k: bool(options.get(k)) for k, _, _ in install_options()})
@@ -251,12 +258,14 @@ def frozen() -> bool:
     return bool(getattr(sys, "frozen", False))
 
 
-def windows_uninstaller() -> Path | None:
-    """Inno Setup's uninstaller next to the installed .exe."""
-    if sys.platform != "win32" or not frozen():
-        return None
-    found = sorted(Path(sys.executable).parent.glob("unins*.exe"))
-    return found[0] if found else None
+def windows_install_dir() -> Path | None:
+    """Folder of the installed Windows app (or of the copy we're running, if it's not
+    the downloaded setup .exe)."""
+    exe = installed_path()
+    if exe and exe.suffix.lower() == ".exe":
+        return exe.parent
+    run = wininstall.running_exe()
+    return run.parent if run and not wininstall.is_setup_build() else None
 
 
 def mac_app_bundle() -> Path | None:
@@ -276,9 +285,14 @@ def _mac_apps_to_delete() -> list[Path]:
 
 def removal_summary() -> list[str]:
     """Human-readable list of what delete_app() will remove on this platform."""
-    if windows_uninstaller():
-        return [f"the app in {Path(sys.executable).parent}",
-                "Start menu entry, desktop shortcut and the Windows uninstall entry"]
+    if wininstall.running_exe():
+        items = []
+        d = windows_install_dir()
+        if d:
+            items.append(f"the app in {d}")
+        if wininstall.is_setup_build():
+            items.append(f"this downloaded file ({wininstall.running_exe()})")
+        return items + ["Start menu entry, desktop shortcut, terminal command and the Installed apps entry"]
     if mac_app_bundle():
         return [str(a) for a in _mac_apps_to_delete()] + ["Dock icon, desktop shortcut and Terminal command"]
     items = []
@@ -298,12 +312,9 @@ def delete_app(remove_data=False):
     because on Windows/macOS the actual removal finishes once this process exits."""
     if remove_data:
         shutil.rmtree(DATA_DIR, ignore_errors=True)
-    unins = windows_uninstaller()
-    if unins:
-        # wait for us to exit so no files are locked, then run Inno's uninstaller quietly
-        flags = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW
-        subprocess.Popen(f'cmd /c timeout /t 3 /nobreak >nul & "{unins}" /SILENT /SUPPRESSMSGBOXES',
-                         creationflags=flags, close_fds=True)
+    if wininstall.running_exe():
+        wininstall.uninstall(windows_install_dir())
+        RECORD.unlink(missing_ok=True)
         return
     if mac_app_bundle():
         apps = _mac_apps_to_delete()
@@ -315,14 +326,35 @@ def delete_app(remove_data=False):
     uninstall(remove_data=False, delete_running=True)
 
 
+def apply_windows_update(argv, status):
+    """Run by the newly downloaded setup .exe: wait for the old app to quit, install
+    over it with the same options as before, then start the updated app."""
+    target = Path(argv[argv.index("--apply-update") + 1])
+    if "--wait-pid" in argv:
+        status("Waiting for Jace Launcher to close…")
+        wininstall.wait_for_pid(int(argv[argv.index("--wait-pid") + 1]))
+    parts = install_record().get("parts") or [k for k, _, d in wininstall.OPTIONS if d]
+    exe = install_app(target, {k: True for k in parts}, status)
+    if "--no-relaunch" not in argv:
+        wininstall.relaunch(exe)
+    return exe
+
+
 def handle_cli(argv) -> bool:
     """Handle non-GUI flags. Returns True if the app should exit."""
     if "--install" in argv and ("--yes" in argv or "-y" in argv):
         exe = install_app(default_install_dir(), {k: d for k, _, d in install_options()})
         print(f"Installed to {exe}")
         return True
+    if "--update" in argv and ("--yes" in argv or "-y" in argv):
+        from jace import updater
+        updater.cli(argv)
+        return True
+    if "--apply-update" in argv and "--no-gui" in argv:
+        apply_windows_update(argv, print)
+        return True
     if "--uninstall" in argv:
-        if mac_app_bundle():
+        if mac_app_bundle() or wininstall.running_exe():
             delete_app(remove_data="--purge" in argv)
         else:
             uninstall(remove_data="--purge" in argv)

@@ -42,8 +42,7 @@ GitHub Actions builds every platform, because PyInstaller can't build Windows or
 
 | Platform | File | Install |
 |---|---|---|
-| Windows 10/11 | `JaceLauncher-<ver>-windows-x64-setup.exe` | Setup wizard: choose the folder, desktop shortcut and Start menu entry. Includes an uninstaller. |
-| Windows | `…-windows-x64-portable.zip` | Unzip and run `JaceLauncher.exe`. |
+| Windows 10/11 | `JaceLauncher-<ver>-windows-x64.exe` | Run it; a setup wizard installs it (no admin needed). |
 | macOS 12+ (Apple Silicon) | `JaceLauncher-<ver>-macos-arm64.app.zip` | Safari unzips it to **Jace Launcher.app** in Downloads. Open it and a setup wizard installs it (see below). |
 | macOS 12+ (Intel) | `JaceLauncher-<ver>-macos-x86_64.app.zip` | Same as above. |
 | Linux | `JaceLauncher-<ver>-x86_64.AppImage` | Run it; the setup wizard does the rest (see below). |
@@ -54,13 +53,22 @@ Every push to `main` builds all of these; download them from the run's **Artifac
 git tag v1.0.0 && git push origin v1.0.0
 ```
 
-The first launch on every platform asks you to add your accounts. **Settings → Delete Jace Launcher** works on all platforms: it runs the uninstaller on Windows, moves the `.app` out of Applications on macOS, and removes the AppImage and shortcuts on Linux.
+The first launch on every platform asks you to add your accounts. **Settings → Delete Jace Launcher** works on every platform. On Windows you can also uninstall from **Settings → Apps → Installed apps**.
+
+**Updates:** when a new release is published, an **Update to vX** button appears in the bottom bar. You can also use **Settings → Updates → Check for updates**. One click downloads the new version, replaces the installed app and restarts it. Your instances, worlds and accounts are kept.
+
+### Windows setup wizard
+Running the downloaded `.exe` opens the same wizard as on Linux and macOS:
+1. add your accounts
+2. choose the install folder (default `%LOCALAPPDATA%\Programs\Jace Launcher`, no admin needed)
+3. choose a Start menu entry, a desktop shortcut, an "Installed apps" entry and a `jace-launcher` terminal command
+4. installs, starts the installed copy, and deletes the downloaded file
 
 **Unsigned builds:** the apps aren't signed with paid Apple or Microsoft certificates, so:
 - **macOS** says the app "can't be opened". Right-click it, choose **Open**, then **Open** again (only needed once). On macOS 15 and newer, go to **System Settings → Privacy & Security → Open Anyway** instead.
 - **Windows SmartScreen** shows "Windows protected your PC". Click **More info → Run anyway**.
 
-To build on a Mac or Windows PC yourself, install the requirements plus `pyinstaller pillow`, then run `python packaging/build.py`. Windows also needs [Inno Setup](https://jrsoftware.org/isinfo.php).
+To build on a Mac or Windows PC yourself, install the requirements plus `pyinstaller pillow`, then run `python packaging/build.py`.
 
 ### macOS setup wizard
 
