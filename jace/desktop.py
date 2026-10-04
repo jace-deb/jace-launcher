@@ -1,6 +1,8 @@
-"""AppImage self-installer: copies the AppImage to a folder of your choice and adds
-an applications-menu entry, a desktop shortcut, a terminal command and AppStream
-metadata (what GNOME Software / KDE Discover read to describe apps).
+"""Self-installers for the Linux AppImage and the macOS .app (see macinstall.py).
+
+Linux: copies the AppImage to a folder of your choice and adds an applications-menu
+entry, a desktop shortcut, a terminal command and AppStream metadata (what GNOME
+Software / KDE Discover read to describe apps).
 
 From a terminal:
     ./JaceLauncher-x86_64.AppImage --install      # opens the setup wizard
@@ -13,7 +15,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from jace import APP_RELEASE_DATE, APP_VERSION
+from jace import APP_RELEASE_DATE, APP_VERSION, macinstall
 from jace.config import DATA_DIR, read_json, write_json
 
 APP_ID = "io.github.jacelauncher.JaceLauncher"
@@ -56,7 +58,7 @@ def install_record() -> dict:
 
 def installed_path() -> Path | None:
     p = install_record().get("path")
-    return Path(p) if p and Path(p).is_file() else None
+    return Path(p) if p and Path(p).exists() else None   # a file (AppImage) or a .app folder
 
 
 def is_installed() -> bool:
@@ -64,8 +66,51 @@ def is_installed() -> bool:
 
 
 def running_installed_copy() -> bool:
-    src, dst = running_appimage(), installed_path()
+    src, dst = running_package(), installed_path()
     return bool(src and dst and src.resolve() == dst.resolve())
+
+
+def running_package() -> Path | None:
+    """The self-installable thing we're running from: an AppImage file or a macOS .app."""
+    return running_appimage() or macinstall.running_bundle()
+
+
+def setup_available() -> bool:
+    return running_package() is not None
+
+
+def default_install_dir() -> Path:
+    return macinstall.default_dir() if macinstall.running_bundle() else DEFAULT_DIR
+
+
+def install_options() -> list[tuple[str, str, bool]]:
+    """(key, label, checked by default) for the wizard's shortcut checkboxes."""
+    if macinstall.running_bundle():
+        return macinstall.OPTIONS
+    return [("menu", "Add to the applications menu", True),
+            ("desktop", f"Create a desktop shortcut  ({desktop_dir()})", True),
+            ("terminal", "Add the  jace-launcher  terminal command", True),
+            ("appstream", "Show in GNOME Software, KDE Discover and other app centers", True)]
+
+
+PART_DESCRIPTIONS = {
+    "menu": "Added to your applications menu",
+    "applications": "Added to Launchpad and Spotlight",
+    "desktop": "Desktop shortcut created",
+    "dock": "Added to the Dock",
+    "terminal": "Run  jace-launcher  from a terminal",
+    "appstream": "App center info registered",
+    "unquarantine": "Removed the downloaded-from-internet flag",
+}
+
+
+def install_app(target_dir: Path, options: dict, status=print) -> Path:
+    """Install on whichever platform we're running; returns the installed path."""
+    if macinstall.running_bundle():
+        path, parts = macinstall.install(target_dir, options, status)
+        write_json(RECORD, {"path": str(path), "version": APP_VERSION, "parts": parts})
+        return path
+    return install(target_dir, status=status, **{k: bool(options.get(k)) for k, _, _ in install_options()})
 
 
 def _desktop_entry(exe: Path) -> str:
@@ -215,11 +260,18 @@ def windows_uninstaller() -> Path | None:
 
 
 def mac_app_bundle() -> Path | None:
-    """The Jace Launcher.app we're running from (Contents/MacOS/<exe> -> .app)."""
-    if sys.platform != "darwin" or not frozen():
-        return None
-    app = Path(sys.executable).resolve().parents[2]
-    return app if app.suffix == ".app" else None
+    return macinstall.running_bundle()
+
+
+def _mac_apps_to_delete() -> list[Path]:
+    """The installed .app plus the copy we're running from, if that's a separate
+    deletable copy (not the read-only DMG or Gatekeeper's translocated copy)."""
+    apps = []
+    for app in (installed_path(), mac_app_bundle()):
+        if (app and app.suffix == ".app" and app not in apps and not macinstall.translocated(app)
+                and not str(app).startswith("/Volumes/")):
+            apps.append(app)
+    return apps
 
 
 def removal_summary() -> list[str]:
@@ -228,7 +280,7 @@ def removal_summary() -> list[str]:
         return [f"the app in {Path(sys.executable).parent}",
                 "Start menu entry, desktop shortcut and the Windows uninstall entry"]
     if mac_app_bundle():
-        return [f"{mac_app_bundle()}"]
+        return [str(a) for a in _mac_apps_to_delete()] + ["Dock icon, desktop shortcut and Terminal command"]
     items = []
     installed, running = installed_path(), running_appimage()
     if installed:
@@ -253,10 +305,12 @@ def delete_app(remove_data=False):
         subprocess.Popen(f'cmd /c timeout /t 3 /nobreak >nul & "{unins}" /SILENT /SUPPRESSMSGBOXES',
                          creationflags=flags, close_fds=True)
         return
-    app = mac_app_bundle()
-    if app:
-        subprocess.Popen(["/bin/sh", "-c", 'sleep 2; rm -rf "$0"', str(app)], start_new_session=True,
-                         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    if mac_app_bundle():
+        apps = _mac_apps_to_delete()
+        macinstall.uninstall(apps[0] if apps else None)
+        for extra in apps[1:]:
+            macinstall.uninstall(extra)
+        RECORD.unlink(missing_ok=True)
         return
     uninstall(remove_data=False, delete_running=True)
 
@@ -264,11 +318,14 @@ def delete_app(remove_data=False):
 def handle_cli(argv) -> bool:
     """Handle non-GUI flags. Returns True if the app should exit."""
     if "--install" in argv and ("--yes" in argv or "-y" in argv):
-        exe = install()
+        exe = install_app(default_install_dir(), {k: d for k, _, d in install_options()})
         print(f"Installed to {exe}")
         return True
     if "--uninstall" in argv:
-        uninstall(remove_data="--purge" in argv)
+        if mac_app_bundle():
+            delete_app(remove_data="--purge" in argv)
+        else:
+            uninstall(remove_data="--purge" in argv)
         print("Jace Launcher removed." + ("" if "--purge" in argv else
               " Your instances and worlds were kept (add --purge to delete them too)."))
         return True

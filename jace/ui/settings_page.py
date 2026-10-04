@@ -137,12 +137,12 @@ class SettingsPage(QWidget):
         lay.addWidget(g)
 
         # --- Desktop integration (only meaningful when running as an AppImage)
-        if desktop.running_appimage() or desktop.is_installed():
+        if desktop.setup_available() or desktop.is_installed():
             g = QGroupBox("Desktop integration")
             f = QHBoxLayout(g)
             self.integ = self._path_label("")
             f.addWidget(self.integ, 1)
-            if desktop.running_appimage():
+            if desktop.setup_available():
                 ib = QPushButton("Run setup…")
                 ib.clicked.connect(self._install_app)
                 f.addWidget(ib)

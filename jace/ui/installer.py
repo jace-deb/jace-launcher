@@ -1,5 +1,6 @@
 """Setup wizard shown the first time the AppImage runs (or with --install)."""
 import shutil
+import sys
 from pathlib import Path
 
 from PySide6.QtCore import Qt
@@ -12,6 +13,9 @@ from jace.accounts import accounts
 from jace.config import settings
 from jace.ui.accounts_page import AccountsPage
 from jace.ui.common import run_task
+
+
+IS_MAC = sys.platform == "darwin"
 
 
 def _muted(text):
@@ -36,8 +40,10 @@ class WelcomePage(QWizardPage):
             "<p>The next steps will:</p>"
             "<ul><li>sign in to your Minecraft accounts</li>"
             "<li>choose where to install Jace Launcher</li>"
-            "<li>add it to your applications menu and desktop</li>"
-            "<li>register it with GNOME Software and other app centers</li></ul>"
+            + ("<li>add it to the Dock, Launchpad and your desktop</li>"
+               "<li>stop macOS from warning that the app is \"damaged\"</li></ul>" if IS_MAC else
+               "<li>add it to your applications menu and desktop</li>"
+               "<li>register it with GNOME Software and other app centers</li></ul>")
             + ("<p>A version is already installed; it will be replaced. Your instances, worlds and accounts "
                "are kept.</p>" if upgrade else ""))
         text.setWordWrap(True)
@@ -71,7 +77,7 @@ class LocationPage(QWizardPage):
         lay.addWidget(QLabel("Install Jace Launcher to:"))
         row = QHBoxLayout()
         current = desktop.installed_path()
-        self.path = QLineEdit(str(current.parent if current else desktop.DEFAULT_DIR))
+        self.path = QLineEdit(str(current.parent if current else desktop.default_install_dir()))
         browse = QPushButton("Browse…")
         browse.clicked.connect(self._browse)
         row.addWidget(self.path, 1)
@@ -83,17 +89,24 @@ class LocationPage(QWizardPage):
         self._update_space()
         lay.addSpacing(12)
 
-        self.menu = QCheckBox("Add to the applications menu")
-        self.desktop = QCheckBox(f"Create a desktop shortcut  ({desktop.desktop_dir()})")
-        self.terminal = QCheckBox("Add the  jace-launcher  terminal command")
-        self.appstream = QCheckBox("Show in GNOME Software, KDE Discover and other app centers")
-        for cb in (self.menu, self.desktop, self.terminal, self.appstream):
-            cb.setChecked(True)
+        self.options = {}
+        for key, label, default in desktop.install_options():
+            cb = QCheckBox(label)
+            cb.setChecked(default)
+            self.options[key] = cb
             lay.addWidget(cb)
-        lay.addWidget(_muted(
-            "App centers list apps using AppStream info; this adds Jace Launcher's description, icon and "
-            "keywords so app centers that read local metadata can recognise it."))
+        if IS_MAC:
+            lay.addWidget(_muted(
+                "Mac apps normally live in Applications. macOS may ask permission to let Jace Launcher update "
+                "the Dock or your Desktop - click OK."))
+        else:
+            lay.addWidget(_muted(
+                "App centers list apps using AppStream info; this adds Jace Launcher's description, icon and "
+                "keywords so app centers that read local metadata can recognise it."))
         lay.addStretch()
+
+    def chosen_options(self) -> dict:
+        return {k: cb.isChecked() for k, cb in self.options.items()}
 
     def _browse(self):
         d = QFileDialog.getExistingDirectory(self, "Install location", self.path.text())
@@ -146,9 +159,8 @@ class InstallPage(QWizardPage):
         loc = self.loc
 
         def work(callback):
-            return desktop.install(Path(loc.path.text()).expanduser(), menu=loc.menu.isChecked(),
-                                   desktop=loc.desktop.isChecked(), terminal=loc.terminal.isChecked(),
-                                   appstream=loc.appstream.isChecked(), status=callback["setStatus"])
+            return desktop.install_app(Path(loc.path.text()).expanduser(), loc.chosen_options(),
+                                       status=callback["setStatus"])
 
         def done(path):
             self.result_path = path
@@ -183,18 +195,17 @@ class FinishPage(QWizardPage):
     def initializePage(self):
         parts = desktop.install_record().get("parts", [])
         lines = [f"Installed to <b>{self.install.result_path}</b>"]
-        if "menu" in parts:
-            lines.append("✓ Added to your applications menu")
-        if "desktop" in parts:
-            lines.append("✓ Desktop shortcut created (on GNOME you may need the Desktop Icons extension to see it)")
-        if "terminal" in parts:
-            lines.append("✓ Run <code>jace-launcher</code> from a terminal")
-        if "appstream" in parts:
-            lines.append("✓ App center info registered")
+        lines += [f"✓ {desktop.PART_DESCRIPTIONS[p]}" for p in parts if p in desktop.PART_DESCRIPTIONS]
+        if "desktop" in parts and not IS_MAC:
+            lines.append("(on GNOME you may need the Desktop Icons extension to see desktop shortcuts)")
         a = accounts.current()
         lines.append(f"✓ Signed in as <b>{a['username']}</b>" if a else "No account yet. Add one from the Accounts tab.")
-        lines.append("<br>To uninstall later, right-click Jace Launcher in the applications menu → "
-                     "<i>Uninstall Jace Launcher</i>, or use Settings → Desktop integration.")
+        if IS_MAC:
+            lines.append("<br>You can eject the Jace Launcher disk image now. To uninstall later, use "
+                         "Settings → Delete Jace Launcher.")
+        else:
+            lines.append("<br>To uninstall later, right-click Jace Launcher in the applications menu → "
+                         "<i>Uninstall Jace Launcher</i>, or use Settings → Delete Jace Launcher.")
         self.summary.setText("<br>".join(lines))
 
 

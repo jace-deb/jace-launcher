@@ -79,6 +79,29 @@ jobs:
           MIN=$(/usr/libexec/PlistBuddy -c "Print LSMinimumSystemVersion" "build/darwin/dist/Jace Launcher.app/Contents/Info.plist")
           echo "LSMinimumSystemVersion = $MIN"
           [ "${MIN%%.*}" -le 12 ] || { echo "::error::Build needs macOS $MIN; must run on macOS 12"; exit 1; }
+      - name: Test the Mac installer (install from a downloaded DMG, then uninstall)
+        env:
+          JACE_LAUNCHER_HOME: ${{ runner.temp }}/jace-home-install
+        run: |
+          set -x
+          DMG=$(ls dist/*.dmg)
+          # mark the DMG as downloaded from the internet, like a browser does
+          xattr -w com.apple.quarantine "0081;$(printf %x $(date +%s));Safari;" "$DMG"
+          hdiutil attach -nobrowse "$DMG"
+          "/Volumes/Jace Launcher/Jace Launcher.app/Contents/MacOS/Jace Launcher" --install --yes
+          hdiutil detach "/Volumes/Jace Launcher"
+          APP="/Applications/Jace Launcher.app"
+          test -d "$APP"
+          test -L "$HOME/Desktop/Jace Launcher"
+          defaults read com.apple.dock persistent-apps | grep -q "Jace%20Launcher.app"
+          if xattr -r "$APP" | grep -q com.apple.quarantine; then echo "::error::app still quarantined"; exit 1; fi
+          QT_QPA_PLATFORM=offscreen "$APP/Contents/MacOS/Jace Launcher" --self-test
+          "$APP/Contents/MacOS/Jace Launcher" --uninstall
+          sleep 5
+          test ! -e "$APP"
+          test ! -e "$HOME/Desktop/Jace Launcher"
+          if defaults read com.apple.dock persistent-apps | grep -q "Jace%20Launcher.app"; then echo "::error::Dock icon left behind"; exit 1; fi
+          echo "MAC INSTALLER OK"
       - uses: actions/upload-artifact@v7
         with:
           name: macos-${{ matrix.arch }}
