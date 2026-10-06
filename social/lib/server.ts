@@ -5,10 +5,15 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 export const ONLINE_WINDOW_MS = 3 * 60 * 1000;   // heartbeat every 2 min, offline after 3
 const SESSION_DAYS = 30;
 
+/** Project URL, tolerating a pasted ".../rest/v1/" or trailing slash. */
+export function supabaseUrl(): string | undefined {
+  return process.env.SUPABASE_URL?.trim().replace(/\/(rest|realtime|auth)\/v1.*$/, "").replace(/\/+$/, "");
+}
+
 let _db: SupabaseClient | null = null;
 export function db(): SupabaseClient {
   if (!_db) {
-    const url = process.env.SUPABASE_URL;
+    const url = supabaseUrl();
     const key = process.env.SUPABASE_SECRET_KEY;
     if (!url || !key) throw new ApiError(500, "Server is missing SUPABASE_URL / SUPABASE_SECRET_KEY");
     _db = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
@@ -103,7 +108,7 @@ export async function mojangLookup(name: string): Promise<{ uuid: string; name: 
  * name reveals nothing private; clients fetch details through the API.
  */
 export async function notify(inboxes: string[], event: string, payload: Record<string, unknown>) {
-  const url = process.env.SUPABASE_URL;
+  const url = supabaseUrl();
   const key = process.env.SUPABASE_SECRET_KEY;
   if (!url || !key || !inboxes.length) return;
   try {

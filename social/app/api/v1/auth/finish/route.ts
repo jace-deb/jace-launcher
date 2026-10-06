@@ -1,7 +1,7 @@
 // Step 2 of sign-in: ask Mojang whether this player really joined our server id.
 // Only the real owner of the Minecraft account can make that true, and we never
 // see their Microsoft password or Minecraft token.
-import { ApiError, body, createSession, db, ensureProfile, handler } from "@/lib/server";
+import { supabaseUrl, ApiError, body, createSession, db, ensureProfile, handler } from "@/lib/server";
 
 export const POST = handler(async (req) => {
   const { name, server_id } = await body<{ name?: string; server_id?: string }>(req);
@@ -21,6 +21,6 @@ export const POST = handler(async (req) => {
   return {
     ...session,
     uuid: profile.uuid, name: profile.name, inbox: profile.inbox,
-    realtime: { url: process.env.SUPABASE_URL, key: process.env.SUPABASE_PUBLISHABLE_KEY },
+    realtime: { url: supabaseUrl(), key: process.env.SUPABASE_PUBLISHABLE_KEY },
   };
 });
