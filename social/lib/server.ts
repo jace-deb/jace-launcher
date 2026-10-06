@@ -40,7 +40,10 @@ export function handler(fn: (req: Request) => Promise<unknown>) {
     } catch (e) {
       if (e instanceof ApiError) return Response.json({ error: e.message }, { status: e.status });
       console.error(e);
-      return Response.json({ error: "Server error" }, { status: 500 });
+      // Database errors: share only the error code (e.g. 42501 = no permission,
+      // 42P01 = table missing) so setup problems can be diagnosed safely.
+      const code = (e as { code?: string })?.code;
+      return Response.json({ error: code ? `Database error (${code})` : "Server error" }, { status: 500 });
     }
   };
 }
