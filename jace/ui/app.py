@@ -9,7 +9,7 @@ from PySide6.QtWidgets import (QApplication, QButtonGroup, QDialog, QFileDialog,
                                QMainWindow, QMessageBox, QPlainTextEdit, QProgressBar, QPushButton, QStackedWidget,
                                QVBoxLayout, QWidget)
 
-from jace import APP_NAME, APP_VERSION, AUTHOR, desktop, macinstall, updater, wininstall
+from jace import APP_NAME, APP_VERSION, AUTHOR, desktop, social, macinstall, updater, wininstall
 from jace.accounts import accounts
 from jace.config import settings
 from jace.content import import_modpack_file
@@ -17,6 +17,7 @@ from jace.ui.accounts_page import AccountsPage
 from jace.ui.browse_page import BrowsePage
 from jace.ui.common import STYLE, run_task, show_error
 from jace.ui.friends_page import FriendsPage
+from jace.ui.social_live import SocialLive
 from jace.instance_icons import icon_image
 from jace.instances import list_instances
 from jace.ui.installer import FirstRunDialog, SetupWizard, confirm_uninstall
@@ -159,8 +160,18 @@ class MainWindow(QMainWindow):
         self.library.import_requested.connect(self.import_modpack)
         self.browse.instance_created.connect(self._instance_created)
         self.accounts_page.changed.connect(self._account_changed)
-        self.friends_page.join_requested.connect(self._join_server)
-        self.friends_page.copy_skin_requested.connect(self._copy_friend_skin)
+        self.friends_page.join_requested.connect(self._join_friend)
+        self.friends_page.unread_changed.connect(self._unread_changed)
+        self.friends_page.signed_in.connect(self._social_signed_in)
+        self.playing = None          # (instance, server) while a game launched from here runs
+        self.live = SocialLive(self)
+        self.live.message.connect(self._on_social_message)
+        self.live.message.connect(self.friends_page.on_message)
+        self.live.friends.connect(self._on_social_friends)
+        self.live.presence.connect(self.friends_page.on_change)
+        self._presence_timer = QTimer(self, interval=120_000)
+        self._presence_timer.timeout.connect(self._send_presence)
+        QTimer.singleShot(1500, self._start_social)
         self.settings_page.check_updates_requested.connect(lambda: self.check_updates(manual=True))
         if settings.get("auto_update_check") is not False and not updater.unsupported_reason():
             QTimer.singleShot(3000, self.check_updates)
@@ -261,26 +272,83 @@ class MainWindow(QMainWindow):
         a = accounts.current()
         self.account_btn.setText(f"👤  {a['username']}" if a else "👤  Add account")
         self.browse.refresh_instances()
+        if hasattr(self, "live"):           # switching accounts switches Jace Social identity
+            self.live.stop()
+            self._presence_timer.stop()
+            self._unread_changed(0)
+            self.friends_page.update_mode()
+            self._start_social()
+
+    # -- Jace Social (friends & chat)
+    def _start_social(self):
+        s = social.current_session()
+        if not s:
+            return
+        self.live.start(s.get("realtime") or {}, s.get("inbox", ""))
+        self._presence_timer.start()
+        self._send_presence()
+        self.friends_page.refresh(quiet=True)
+
+    def _social_signed_in(self, s):
+        self._start_social()
+
+    def _activity(self):
+        if self.playing:
+            inst, server = self.playing
+            if any(p.name.startswith("jace-friends") for p in inst.content_dir("mod").glob("*.jar")):
+                return None          # the Jace Friends mod reports richer status from inside the game
+            return {"type": "playing", "instance": inst.name, "version": inst.mc_version, "server": server}
+        return {"type": "launcher"}
+
+    def _send_presence(self):
+        if not social.current_session():
+            return
+        act = self._activity()
+        if act is None:
+            return
+        run_task(social.set_presence, act, on_error=lambda m: None)
+
+    def _unread_changed(self, n):
+        self.nav.button(4).setText(f"👥  Friends ({n})" if n else "👥  Friends")
+
+    def _on_social_message(self, payload):
+        if not (self.isVisible() and self.stack.currentWidget() is self.friends_page):
+            self.notify(f"💬  New message from {payload.get('name', 'a friend')}")
+
+    def _on_social_friends(self, payload):
+        if payload.get("kind") == "request":
+            self.notify(f"👥  {payload.get('name', 'Someone')} sent you a friend request")
+        elif payload.get("kind") == "accepted":
+            self.notify(f"👥  {payload.get('name', 'Someone')} accepted your friend request")
+        self.friends_page.on_change(payload)
+
+    def go_offline(self):
+        """Called when the launcher quits."""
+        if social.current_session() and not self.playing:
+            try:
+                social.set_presence(None, offline=True)
+            except Exception:  # noqa: BLE001
+                pass
 
     def _selection_changed(self, inst):
         self.selected_label.setText(f"<b>{inst.name}</b><br><span style='color:#8b919c'>{inst.describe()}</span>"
                                     if inst else "")
         self.play_btn.setEnabled(inst is not None and self.busy == 0)
 
-    def _join_server(self, server):
-        inst = self.library.current()
+    def _join_friend(self, address, version):
+        """Join a friend's hosted world / server with an instance of the right version."""
+        insts = self.library.instances()
+        cur = self.library.current()
+        match = [i for i in insts if i.mc_version == version] if version else []
+        inst = (cur if cur in match else match[0]) if match else (cur if not version else None)
         if not inst:
-            QMessageBox.information(self, "Pick an instance", "Select an instance in the Library first, "
-                                    "with a Minecraft version the server supports.")
+            QMessageBox.information(self, "No matching instance",
+                                    f"Your friend is playing Minecraft {version}. Create an instance with "
+                                    f"{version} (Library → New instance), then click Join again.")
             self.go(0)
             return
-        self.notify(f"Joining {server} with {inst.name}…")
-        self.play(inst, server)
-
-    def _copy_friend_skin(self, url, slim):
-        self.go(2)
-        self.skins.show_preview(url, slim)
-        self.notify("Previewing your friend's skin - click Apply to use it")
+        self.notify(f"Joining {address} with {inst.name}…")
+        self.play(inst, address)
 
     def _browse_for(self, inst, kind):
         self.go(1)
@@ -327,6 +395,8 @@ class MainWindow(QMainWindow):
 
         def started(proc):
             self.notify(f"Playing {inst.name}")
+            self.playing = (inst, server)
+            self._send_presence()
             self.library.refresh(inst.id)
             con = GameConsole(inst.name, proc, self)
             self.consoles.append(con)
@@ -339,6 +409,8 @@ class MainWindow(QMainWindow):
 
     def _game_exited(self, con, inst, code):
         con.state.setText(f"Exited with code {code}")
+        self.playing = None
+        self._send_presence()
         if self.isHidden():
             self.show()
         self.notify(f"{inst.name} closed" + (f" (exit code {code})" if code else ""))
@@ -536,4 +608,5 @@ def main():
             FirstRunDialog().exec()
     w = MainWindow()
     w.show()
+    app.aboutToQuit.connect(w.go_offline)
     sys.exit(app.exec())
