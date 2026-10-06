@@ -12,6 +12,7 @@ The server behind Jace Launcher's synced friends list, chat and hosted worlds. T
 ## Setup (one time)
 
 1. **Supabase:** create a free project at <https://supabase.com>.
+   - **Security options when creating the project:** Data API **on**, "Automatically expose new tables" **off**, automatic RLS **on**.
    - **SQL Editor:** paste and run `supabase/schema.sql`.
    - **Realtime → Settings:** make sure public channel access is allowed (it's the default).
    - **Project Settings → API Keys:** copy the project URL, the **publishable** key and the **secret** key.

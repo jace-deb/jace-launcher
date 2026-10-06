@@ -54,3 +54,11 @@ alter table sessions        enable row level security;
 alter table auth_challenges enable row level security;
 alter table friendships     enable row level security;
 alter table messages        enable row level security;
+
+-- Access: only the server's secret key (service_role) may use these tables.
+-- Works with "Automatically expose new tables" turned OFF (recommended), and
+-- makes sure the public keys (anon / authenticated) can't touch anything.
+grant usage on schema public to service_role;
+grant select, insert, update, delete on profiles, sessions, auth_challenges, friendships, messages to service_role;
+grant usage, select on all sequences in schema public to service_role;
+revoke all on profiles, sessions, auth_challenges, friendships, messages from anon, authenticated;
