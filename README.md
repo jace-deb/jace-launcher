@@ -55,7 +55,7 @@ GitHub Actions builds every platform, because PyInstaller can't build Windows or
 | macOS 12+ (Intel) | `JaceLauncher-<ver>-macos-x86_64.app.zip` | Same as above. |
 | Linux | `JaceLauncher-<ver>-x86_64.AppImage` | Run it; the setup wizard does the rest (see below). |
 
-Every push to `main` builds all of these; download them from the run's **Artifacts**. Pushing a version tag also publishes a GitHub Release:
+Every push to `main` builds all of these; download them from the run's **Artifacts**. Pushing a version tag publishes a GitHub Release, then publishes that release to [Jace Store](https://jace-store-deb.vercel.app/project/jace-launcher) as links to the GitHub downloads. Add the release notes to `CHANGELOG.md` first; the store uses them.
 
 ```bash
 git tag v1.0.0 && git push origin v1.0.0

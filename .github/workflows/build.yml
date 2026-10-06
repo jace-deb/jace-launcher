@@ -235,3 +235,21 @@ jobs:
         with:
           files: artifacts/*
           generate_release_notes: true
+
+  store:
+    # Publish the new release to Jace Store as links to the GitHub downloads.
+    # Needs the JACE_STORE_TOKEN repository secret; skipped if it isn't set.
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: release
+    runs-on: ubuntu-latest
+    env:
+      JACE_STORE_TOKEN: ${{ secrets.JACE_STORE_TOKEN }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Publish to Jace Store
+        run: |
+          if [ -z "$JACE_STORE_TOKEN" ]; then
+            echo "::warning::JACE_STORE_TOKEN secret not set - skipping Jace Store"
+            exit 0
+          fi
+          python3 packaging/publish_store.py "${{ github.ref_name }}"
