@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.1.0
+- **Synced friends list:** your friends are tied to your Minecraft account through Jace Social, so they follow you to any computer. Add friends by username, even if they haven't used Jace Launcher yet; they'll see your request when they sign in.
+- **Chat** with friends, with live notifications and unread badges.
+- **See what friends are doing:** online, playing a version or server, or hosting a world. Click **Join** to play with them; the launcher picks an instance with the right Minecraft version.
+- **Jace Friends mod** for Minecraft 26.3 (on Jace Store): friends list and chat in game (press **J**), plus "Host this world for friends" with e4mc.
+- Sign-in is verified by Mojang and needs a Microsoft account.
+- **Jace Store in Browse:** search and install mods, modpacks, resource packs and shaders from Jace Store. Files are checked against the store's SHA-1, Store mods count in **Check for updates**, and hand-added Store files get the **Delete** button.
+- **Dependencies from the mod itself:** required mods listed in a jar's `fabric.mod.json`, `quilt.mod.json` or `mods.toml` are installed automatically from Modrinth. This covers Jace Store mods and jars you add by hand.
+
 ## 1.0.9
 - **Browse:** mods, resource packs and shaders already in the selected instance show a **Delete** button instead of Install. This includes ones you added by hand.
 - **Synced folders:** share worlds, resource packs, shaders, screenshots and schematics between instances. Move the shared folder into Dropbox, OneDrive or Google Drive to sync between computers.

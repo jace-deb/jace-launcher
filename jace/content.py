@@ -159,7 +159,74 @@ class CurseForge:
         return vs[0] if vs else None
 
 
-SOURCES = {"modrinth": Modrinth(), "curseforge": CurseForge()}
+# =============================================================================
+# Jace Store  (https://jace-store-deb.vercel.app/developers/launchers)
+# =============================================================================
+class JaceStore:
+    name = "Jace Store"
+    API = "https://jace-store-deb.vercel.app/api/launcher/v1"
+    SORTS = {"Relevance": "downloads", "Downloads": "downloads", "Followers": "downloads",
+             "Newest": "newest", "Updated": "updated"}
+    LOADERS = {"fabric": "fabric", "quilt": "quilt", "forge": "forge", "neoforge": "neoforge"}
+
+    def available(self):
+        return True
+
+    def search(self, query, project_type, game_version=None, loader=None, sort="Relevance", offset=0, limit=20):
+        params = {"q": query, "type": project_type, "sort": self.SORTS.get(sort, "downloads"),
+                  "page": offset // limit + 1, "limit": limit}
+        if game_version:
+            params["game_version"] = game_version
+        if loader and project_type in ("mod", "modpack") and loader in self.LOADERS:
+            params["loader"] = self.LOADERS[loader]
+        data = get_json(f"{self.API}/search", params=params)
+        return [{
+            "source": "jacestore", "id": h["slug"], "title": h["title"], "description": h.get("summary", ""),
+            "author": h.get("author", ""), "downloads": h.get("downloads", 0), "icon_url": h.get("icon_url") or "",
+            "url": h.get("page_url", ""), "project_type": h["type"],
+        } for h in data["hits"]], data.get("total", 0)
+
+    def versions(self, project_id, game_version=None, loader=None, project_type="mod"):
+        params = {}
+        if game_version:
+            params["game_version"] = game_version
+        if loader and project_type in ("mod", "modpack") and loader in self.LOADERS:
+            params["loader"] = self.LOADERS[loader]
+        data = get_json(f"{self.API}/project/{project_id}/versions", params=params)
+        return [self._version(v, project_id) for v in (data["versions"] if isinstance(data, dict) else data)]
+
+    def _version(self, v, slug):
+        files = v.get("files", [])
+        f = next((x for x in files if x.get("primary")), files[0] if files else None)
+        return {
+            "source": "jacestore", "id": v["id"], "project_id": slug, "name": v.get("name") or v["version_number"],
+            "version_number": v["version_number"], "game_versions": v.get("game_versions", []),
+            "loaders": v.get("loaders", []), "date": (v.get("published_at") or "")[:10],
+            # "url" goes through the store's download counter and redirects to the file
+            "file": f and {"url": f["url"], "filename": f["filename"], "sha1": (f.get("hashes") or {}).get("sha1")},
+            "deps": [],      # the store doesn't list dependencies; jar metadata is checked instead
+        }
+
+    def resolve_dep(self, dep, game_version, loader):
+        return None
+
+    def lookup(self, hashes: list[str], game_version=None, loader=None) -> dict:
+        """POST /updates: which store project each file hash belongs to (+ newer versions)."""
+        if not hashes:
+            return {}
+        body = {"hashes": hashes}
+        if game_version:
+            body["game_version"] = game_version
+        if loader in self.LOADERS:
+            body["loader"] = self.LOADERS[loader]
+        try:
+            r = session.post(f"{self.API}/updates", json=body, timeout=30)
+            return r.json().get("results", {}) if r.ok else {}
+        except Exception:  # noqa: BLE001 - store unreachable: just don't identify
+            return {}
+
+
+SOURCES = {"modrinth": Modrinth(), "jacestore": JaceStore(), "curseforge": CurseForge()}
 
 
 # =============================================================================
@@ -209,6 +276,8 @@ def install_version(inst: Instance, version: dict, kind: str, with_deps=True, st
                 dv = None
             if dv and dv["file"] and not _has_project(inst, str(dv["project_id"])):
                 installed += install_version(inst, dv, kind, True, status, _seen)
+        if version["source"] == "jacestore" and len(_seen) == 1:
+            installed += install_missing_dependencies(inst, status)   # from the jar's own metadata
     return installed
 
 
@@ -248,9 +317,12 @@ def installed_projects(inst: Instance, kind: str) -> dict[str, list[Path]]:
                              timeout=30)
             if r.ok:
                 for h, v in r.json().items():
-                    out.setdefault(str(v["project_id"]), []).append(unknown[h])
+                    out.setdefault(str(v["project_id"]), []).append(unknown.pop(h))
         except Exception:  # noqa: BLE001 - offline: launcher records are still used
             pass
+        for h, res in SOURCES["jacestore"].lookup(list(unknown)).items():
+            if h in unknown:
+                out.setdefault(res["project"]["slug"], []).append(unknown[h])
     return out
 
 
@@ -295,6 +367,14 @@ def identify_mods(inst: Instance) -> dict[str, dict]:
                 if name:
                     info[name].update(source="modrinth", project_id=v["project_id"], version_id=v["id"],
                                       version=SOURCES["modrinth"]._version(v))
+    unknown = {i["sha1"]: n for n, i in info.items() if i["source"] is None}
+    for h, res in SOURCES["jacestore"].lookup(list(unknown)).items():
+        name = unknown.get(h)
+        if name:
+            cur = res.get("current_version") or {}
+            info[name].update(source="jacestore", project_id=res["project"]["slug"], version_id=cur.get("id"),
+                              title=res["project"].get("title"),
+                              version={"version_number": cur.get("version_number", ""), "deps": []})
     records = inst.data.setdefault("content", {})
     for name, i in info.items():
         rec = records.get(name)
@@ -334,6 +414,14 @@ def check_mod_updates(inst: Instance, info: dict | None = None) -> list[dict]:
                     updates.append({"filename": name, "project_id": v["project_id"],
                                     "current": info[name]["version"]["version_number"],
                                     "latest": SOURCES["modrinth"]._version(v)})
+    js = {i["sha1"]: n for n, i in info.items() if i["source"] == "jacestore"}
+    for h, res in SOURCES["jacestore"].lookup(list(js), inst.mc_version, inst.loader).items():
+        name = js.get(h)
+        if name and res.get("update_available") and res.get("latest_version"):
+            latest = SOURCES["jacestore"]._version(res["latest_version"], res["project"]["slug"])
+            updates.append({"filename": name, "project_id": res["project"]["slug"], "title": res["project"]["title"],
+                            "current": (res.get("current_version") or {}).get("version_number", name),
+                            "latest": latest})
     cf = SOURCES["curseforge"]
     if cf.available():
         for name, i in info.items():
@@ -348,8 +436,66 @@ def check_mod_updates(inst: Instance, info: dict | None = None) -> list[dict]:
                                 "latest": vs[0]})
     titles = _project_titles([u["project_id"] for u in updates if u["latest"]["source"] == "modrinth"])
     for u in updates:
-        u["title"] = titles.get(u["project_id"]) or u["latest"]["name"]
+        u["title"] = u.get("title") or titles.get(u["project_id"]) or u["latest"]["name"]
     return updates
+
+
+_PLATFORM_IDS = {"minecraft", "java", "fabricloader", "fabric-loader", "quilt_loader", "forge", "neoforge",
+                 "fml", "javafml", "lowcodefml", "mixinextras"}
+
+
+def _dep_key(mod_id: str) -> str:
+    """Fabric API's modules (fabric-*-v1 etc.) are all provided by the fabric-api mod."""
+    if mod_id == "fabric" or (mod_id.startswith("fabric-") and mod_id != "fabric-language-kotlin"):
+        return "fabric-api"
+    return mod_id
+
+
+def jar_metadata(jar: Path) -> tuple[set[str], set[str]]:
+    """(mod ids a jar provides, mod ids it requires) from fabric.mod.json,
+    quilt.mod.json or (Neo)Forge mods.toml."""
+    import tomllib
+    provides, requires = set(), set()
+    try:
+        with zipfile.ZipFile(jar) as z:
+            names = set(z.namelist())
+            if "fabric.mod.json" in names:
+                d = json.loads(z.read("fabric.mod.json").decode("utf-8", "replace"), strict=False)
+                provides |= {d.get("id", "")} | set(d.get("provides", []))
+                requires |= set((d.get("depends") or {}).keys())
+            if "quilt.mod.json" in names:
+                q = json.loads(z.read("quilt.mod.json").decode("utf-8", "replace")).get("quilt_loader", {})
+                provides |= {q.get("id", "")} | {p if isinstance(p, str) else p.get("id", "") for p in q.get("provides", [])}
+                for dep in q.get("depends", []):
+                    if isinstance(dep, str):
+                        requires.add(dep)
+                    elif isinstance(dep, dict) and not dep.get("optional"):
+                        requires.add(dep.get("id", ""))
+            for toml_name in ("META-INF/neoforge.mods.toml", "META-INF/mods.toml"):
+                if toml_name in names:
+                    t = tomllib.loads(z.read(toml_name).decode("utf-8", "replace"))
+                    provides |= {m.get("modId", "") for m in t.get("mods", [])}
+                    for deps in (t.get("dependencies") or {}).values():
+                        for dep in deps:
+                            if dep.get("mandatory") or dep.get("type") == "required":
+                                requires.add(dep.get("modId", ""))
+    except (zipfile.BadZipFile, ValueError, KeyError, OSError):
+        pass
+    provides = {_dep_key(p.split(":")[-1]) for p in provides if p}
+    requires = {_dep_key(r.split(":")[-1]) for r in requires if r} - _PLATFORM_IDS
+    return provides, requires
+
+
+def jar_dependency_gaps(inst: Instance) -> dict[str, list[str]]:
+    """Mods that installed jars say they need but nothing provides: {mod id: [needed by]}."""
+    jars = [p for p in inst.content_dir("mod").glob("*.jar")]       # enabled mods only
+    provided, wants = set(), {}
+    for jar in jars:
+        prov, req = jar_metadata(jar)
+        provided |= prov
+        for r in req:
+            wants.setdefault(r, []).append(jar.name)
+    return {mod_id: by for mod_id, by in wants.items() if mod_id not in provided}
 
 
 def missing_dependencies(inst: Instance, info: dict | None = None) -> list[dict]:
@@ -364,6 +510,13 @@ def missing_dependencies(inst: Instance, info: dict | None = None) -> list[dict]
                 pid = str(dep.get("project_id") or "")
                 if pid and pid not in installed:
                     needed.setdefault(pid, []).append(name)
+    for mod_id, by in jar_dependency_gaps(inst).items():
+        try:
+            pid = get_json(f"{Modrinth.API}/project/{mod_id}")["id"]    # Modrinth slugs usually match mod ids
+        except Exception:  # noqa: BLE001 - not on Modrinth: can't fetch it automatically
+            continue
+        if pid not in installed:
+            needed.setdefault(pid, []).extend(by)
     titles = _project_titles(list(needed))
     out = []
     for pid, by in needed.items():

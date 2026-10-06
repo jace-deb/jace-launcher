@@ -252,7 +252,7 @@ class ContentTab(QWidget):
             if deps:
                 parts.append(f"Installed missing dependencies: {', '.join(deps)}.")
             if unknown:
-                parts.append(f"{unknown} mod(s) aren't on Modrinth, so they can't be checked.")
+                parts.append(f"{unknown} mod(s) aren't on Modrinth or Jace Store, so they can't be checked.")
             self._busy(False, " ".join(parts))
             self.update_all_btn.setText(f"Update all ({len(updates)})")
             self.update_all_btn.setVisible(bool(updates))
