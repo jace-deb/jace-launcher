@@ -87,6 +87,18 @@ def build_windows():
     print("Built", final)
 
 
+def _minos(binary: Path):
+    """The oldest macOS a Mach-O binary runs on (LC_BUILD_VERSION minos), or None."""
+    lines = subprocess.run(["otool", "-l", str(binary)], capture_output=True, text=True).stdout.splitlines()
+    for i, line in enumerate(lines):
+        if "LC_BUILD_VERSION" in line or "LC_VERSION_MIN_MACOSX" in line:
+            for nxt in lines[i + 1:i + 6]:
+                parts = nxt.split()
+                if parts and parts[0] in ("minos", "version"):
+                    return tuple(int(x) for x in parts[1].split("."))
+    return None
+
+
 def macos_min_version(app: Path) -> str:
     """Highest LC_BUILD_VERSION 'minos' among the app's key binaries, i.e. the oldest
     macOS this bundle can really run on. Used for LSMinimumSystemVersion so older Macs
@@ -95,21 +107,19 @@ def macos_min_version(app: Path) -> str:
                               "**/QtWebEngineCore.framework/Versions/A/QtWebEngineCore", "**/libpython3*.dylib",
                               "**/Python.framework/Versions/*/Python")
                 for p in app.glob(pat) if p.is_file()]
-    found = []
-    for b in binaries:
-        out = subprocess.run(["otool", "-l", str(b)], capture_output=True, text=True).stdout
-        lines = out.splitlines()
-        for i, line in enumerate(lines):
-            if "LC_BUILD_VERSION" in line or "LC_VERSION_MIN_MACOSX" in line:
-                for nxt in lines[i + 1:i + 6]:
-                    parts = nxt.split()
-                    if parts and parts[0] in ("minos", "version"):
-                        found.append((tuple(int(x) for x in parts[1].split(".")), b.name))
-                        break
+    found = [(v, b.name) for b in binaries if (v := _minos(b))]
     if not found:
         sys.exit("Couldn't determine the minimum macOS version of the build")
     ver, name = max(found)
     print(f"Minimum macOS: {'.'.join(map(str, ver))} (from {name})")
+    # Every other library must run there too, or that feature silently breaks on older
+    # Macs (e.g. PyAV wheels for macOS 14 broke voice calls on macOS 12).
+    newer = sorted({(v, p.name) for p in app.rglob("*") if p.suffix in (".so", ".dylib") and p.is_file()
+                    for v in [_minos(p)] if v and v > ver})
+    if newer:
+        sys.exit("These libraries need a newer macOS than the app (" + ".".join(map(str, ver)) + "):\n" +
+                 "\n".join(f"  {n}: macOS {'.'.join(map(str, v))}" for v, n in newer) +
+                 "\nPin an older wheel in requirements.txt.")
     return ".".join(map(str, ver))
 
 

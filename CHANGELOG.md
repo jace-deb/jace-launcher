@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.2.1
+- **Voice calls on macOS 12 and 13 (Apple Silicon):** fixed "Voice calls aren't available in this build". The audio library in 1.2.0 needed macOS 14.
+
 ## 1.2.0
 - **Voice calls with friends:** click **📞 Call** in a friend's chat. Audio goes directly between you, or through a relay when your networks don't allow a direct connection. While you play, the Jace Friends mod can start, answer, mute and hang up calls. That needs the game to be started from Jace Launcher.
 - **Server add-ons** (an instance's **Mods** tab): one-click LuckPerms, WorldEdit, Chunky, spark and Ledger for worlds you host for friends.
