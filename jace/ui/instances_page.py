@@ -135,6 +135,58 @@ class NewInstanceDialog(QDialog):
         self.accept()
 
 
+class AddonsDialog(QDialog):
+    """One-click server mods (LuckPerms, WorldEdit, ...) for worlds hosted with Jace Friends."""
+
+    def __init__(self, inst: Instance, parent=None):
+        super().__init__(parent)
+        self.inst = inst
+        self.setWindowTitle("Server add-ons")
+        self.setMinimumWidth(560)
+        lay = QVBoxLayout(self)
+        intro = QLabel("These run on worlds you host for friends with Jace Friends' <b>Host world</b> button.")
+        intro.setWordWrap(True)
+        lay.addWidget(intro)
+        self.status = QLabel("")
+        self.status.setObjectName("muted")
+        self.status.setWordWrap(True)
+        for addon in content.SERVER_ADDONS:
+            row = QHBoxLayout()
+            text = QLabel(f"<b>{addon['title']}</b><br><span style='color:#8b919c'>{addon['description']}</span>")
+            text.setWordWrap(True)
+            row.addWidget(text, 1)
+            btn = QPushButton()
+            btn.setMinimumWidth(96)
+            self._set(btn, content.addon_installed(inst, addon))
+            btn.clicked.connect(lambda _=False, a=addon, b=btn: self._install(a, b))
+            row.addWidget(btn)
+            lay.addLayout(row)
+        lay.addWidget(self.status)
+        close = QPushButton("Done")
+        close.clicked.connect(self.accept)
+        lay.addWidget(close, 0, Qt.AlignmentFlag.AlignRight)
+
+    @staticmethod
+    def _set(btn, installed):
+        btn.setText("Installed" if installed else "Install")
+        btn.setObjectName("" if installed else "primary")
+        btn.setEnabled(not installed)
+        btn.style().polish(btn)
+
+    def _install(self, addon, btn):
+        btn.setEnabled(False)
+        btn.setText("Installing…")
+
+        def done(files):
+            self._set(btn, True)
+            self.status.setText(f"Installed {', '.join(files)}")
+
+        def fail(msg):
+            self._set(btn, False)
+            self.status.setText(msg)
+        run_task(content.install_addon, self.inst, addon, on_done=done, on_error=fail)
+
+
 class ContentTab(QWidget):
     """List of mods / resource packs / shaders for one instance."""
 
@@ -174,6 +226,11 @@ class ContentTab(QWidget):
         op.clicked.connect(lambda: open_folder(inst.content_dir(kind)))
         for w in (b, add, op):
             row.addWidget(w)
+        if kind == "mod" and inst.loader in ("fabric", "quilt", "forge", "neoforge"):
+            addons = QPushButton("Server add-ons...")
+            addons.setToolTip("LuckPerms, WorldEdit and more for worlds you host for friends")
+            addons.clicked.connect(lambda: (AddonsDialog(inst, self).exec(), self.refresh()))
+            row.addWidget(addons)
         row.addStretch()
         row.addWidget(rm)
         lay.addLayout(row)

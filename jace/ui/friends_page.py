@@ -98,7 +98,11 @@ class ChatPanel(QWidget):
         self.remove_btn = QPushButton("Remove friend")
         self.remove_btn.setObjectName("danger")
         self.remove_btn.clicked.connect(lambda: self.friend and page.remove(self.friend))
+        self.call_btn = QPushButton("📞  Call")
+        self.call_btn.clicked.connect(lambda: self.friend and page.calls and
+                                      page.calls.call(self.friend["uuid"], self.friend["name"]))
         top.addWidget(self.join_btn)
+        top.addWidget(self.call_btn)
         top.addWidget(self.remove_btn)
         lay.addLayout(top)
         self.log = QTextBrowser()
@@ -120,7 +124,7 @@ class ChatPanel(QWidget):
     def show_friend(self, f: dict | None):
         self.friend = f
         enabled = f is not None
-        for w in (self.input, self.send_btn, self.remove_btn):
+        for w in (self.input, self.send_btn, self.remove_btn, self.call_btn):
             w.setEnabled(enabled)
         if not f:
             self.title.setText("<span style='color:#8b919c'>Pick a friend to chat</span>")
@@ -209,6 +213,24 @@ class FriendsPage(QWidget):
         top.addWidget(self.add_btn)
         outer.addLayout(top)
 
+        # voice call bar (hidden unless there's a call)
+        self.calls = None
+        self.call_bar = QFrame()
+        self.call_bar.setObjectName("card")
+        cb = QHBoxLayout(self.call_bar)
+        cb.setContentsMargins(16, 10, 16, 10)
+        self.call_text = QLabel("")
+        cb.addWidget(self.call_text, 1)
+        self.answer_btn = QPushButton("Answer")
+        self.answer_btn.setObjectName("primary")
+        self.mute_btn = QPushButton("Mute")
+        self.hangup_btn = QPushButton("Hang up")
+        self.hangup_btn.setObjectName("danger")
+        for w in (self.answer_btn, self.mute_btn, self.hangup_btn):
+            cb.addWidget(w)
+        self.call_bar.hide()
+        outer.addWidget(self.call_bar)
+
         # signed-out panel
         self.signin = QFrame()
         self.signin.setObjectName("card")
@@ -243,6 +265,27 @@ class FriendsPage(QWidget):
         self._poll = QTimer(self, interval=60_000)      # fallback refresh if live updates drop
         self._poll.timeout.connect(lambda: self.refresh(quiet=True))
         self.update_mode()
+
+    # --- voice calls
+    def set_calls(self, calls):
+        self.calls = calls
+        self.answer_btn.clicked.connect(calls.answer)
+        self.mute_btn.clicked.connect(calls.toggle_mute)
+        self.hangup_btn.clicked.connect(lambda: calls.hang_up())
+        calls.changed.connect(self._call_changed)
+
+    def _call_changed(self):
+        c = self.calls
+        name = html.escape(c.peer_name or "a friend")
+        text = {"calling": f"📞  Calling <b>{name}</b>…", "ringing": f"📞  <b>{name}</b> is calling you",
+                "in-call": f"🔊  In a call with <b>{name}</b>" + (" (muted)" if c.muted else "")}.get(c.state, "")
+        self.call_text.setText(text)
+        self.call_bar.setVisible(c.state != "idle")
+        self.answer_btn.setVisible(c.state == "ringing")
+        self.mute_btn.setVisible(c.state == "in-call")
+        self.mute_btn.setText("Unmute" if c.muted else "Mute")
+        self.hangup_btn.setText("Decline" if c.state == "ringing" else "Hang up")
+        self.chat.call_btn.setEnabled(c.state == "idle" and self.chat.friend is not None)
 
     # --- state
     def update_mode(self):

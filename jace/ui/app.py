@@ -18,6 +18,8 @@ from jace.ui.browse_page import BrowsePage
 from jace.ui.common import STYLE, run_task, show_error
 from jace.ui.friends_page import FriendsPage
 from jace.ui.social_live import SocialLive
+from jace.ui import launcher_link
+from jace.ui.calls import CallManager
 from jace.instance_icons import icon_image
 from jace.instances import list_instances
 from jace.ui.installer import FirstRunDialog, SetupWizard, confirm_uninstall
@@ -169,6 +171,12 @@ class MainWindow(QMainWindow):
         self.live.message.connect(self.friends_page.on_message)
         self.live.friends.connect(self._on_social_friends)
         self.live.presence.connect(self.friends_page.on_change)
+        self.calls = CallManager(self)
+        self.live.call.connect(self.calls.on_live)
+        self.calls.error.connect(lambda m: self.notify(f"📞  {m}"))
+        self.calls.incoming.connect(self._incoming_call)
+        self.friends_page.set_calls(self.calls)
+        launcher_link.start(self.calls)
         self._presence_timer = QTimer(self, interval=120_000)
         self._presence_timer.timeout.connect(self._send_presence)
         QTimer.singleShot(1500, self._start_social)
@@ -310,6 +318,12 @@ class MainWindow(QMainWindow):
 
     def _unread_changed(self, n):
         self.nav.button(4).setText(f"👥  Friends ({n})" if n else "👥  Friends")
+
+    def _incoming_call(self, name):
+        self.notify(f"📞  {name} is calling you")
+        QApplication.alert(self)
+        if self.friends_page.isHidden() and not self.playing:
+            self.go(self.stack.indexOf(self.friends_page))
 
     def _on_social_message(self, payload):
         if not (self.isVisible() and self.stack.currentWidget() is self.friends_page):

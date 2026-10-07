@@ -29,6 +29,7 @@ rm -rf "$BUILD"
   --add-data "$ROOT/jace/assets:jace/assets" \
   --collect-all minecraft_launcher_lib \
   --hidden-import PySide6.QtWebEngineWidgets --hidden-import PySide6.QtWebEngineCore \
+  --hidden-import PySide6.QtMultimedia --collect-all aiortc \
   "$ROOT/packaging/entry.py"
 
 # Qt >= 6.5 needs libxcb-cursor on X11 but many distros don't install it.

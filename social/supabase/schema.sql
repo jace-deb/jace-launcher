@@ -62,3 +62,5 @@ grant usage on schema public to service_role;
 grant select, insert, update, delete on profiles, sessions, auth_challenges, friendships, messages to service_role;
 grant usage, select on all sequences in schema public to service_role;
 revoke all on profiles, sessions, auth_challenges, friendships, messages from anon, authenticated;
+
+-- Voice calls: see 002_calls.sql (also run that one).

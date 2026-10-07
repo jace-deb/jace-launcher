@@ -204,11 +204,16 @@ class JaceStore:
             "loaders": v.get("loaders", []), "date": (v.get("published_at") or "")[:10],
             # "url" goes through the store's download counter and redirects to the file
             "file": f and {"url": f["url"], "filename": f["filename"], "sha1": (f.get("hashes") or {}).get("sha1")},
-            "deps": [],      # the store doesn't list dependencies; jar metadata is checked instead
+            # required dependencies, which can live on Jace Store or Modrinth
+            "deps": [{"source": "modrinth" if d.get("source") == "modrinth" else "jacestore", "project_id": d["project"]}
+                     for d in v.get("dependencies", []) if d.get("type") == "required" and d.get("project")],
         }
 
     def resolve_dep(self, dep, game_version, loader):
-        return None
+        if not dep.get("project_id"):
+            return None
+        vs = self.versions(dep["project_id"], game_version, loader)
+        return vs[0] if vs else None
 
     def lookup(self, hashes: list[str], game_version=None, loader=None) -> dict:
         """POST /updates: which store project each file hash belongs to (+ newer versions)."""
@@ -271,7 +276,8 @@ def install_version(inst: Instance, version: dict, kind: str, with_deps=True, st
                 continue
             try:
                 # prefer the newest compatible build over the exact pinned version
-                dv = src.resolve_dep({"project_id": dep_pid} if dep_pid else dep, inst.mc_version, inst.loader)
+                dep_src = SOURCES.get(dep.get("source"), src)    # Jace Store mods can need Modrinth mods
+                dv = dep_src.resolve_dep({"project_id": dep_pid} if dep_pid else dep, inst.mc_version, inst.loader)
             except Exception:
                 dv = None
             if dv and dv["file"] and not _has_project(inst, str(dv["project_id"])):
@@ -279,6 +285,30 @@ def install_version(inst: Instance, version: dict, kind: str, with_deps=True, st
         if version["source"] == "jacestore" and len(_seen) == 1:
             installed += install_missing_dependencies(inst, status)   # from the jar's own metadata
     return installed
+
+
+# -- Server add-ons --------------------------------------------------------------------
+# Mod versions of popular server plugins. They run on the world you host from
+# singleplayer (Jace Friends' "Host world"), so friends get permissions, WorldEdit, etc.
+SERVER_ADDONS = [
+    {"slug": "luckperms", "id": "Vebnzrzj", "title": "LuckPerms",
+     "description": "Custom permissions. Jace Friends puts players in jace_visitor, jace_builder and jace_admin groups."},
+    {"slug": "worldedit", "id": "1u6JkXh5", "title": "WorldEdit", "description": "Build and edit huge areas with commands and the wand."},
+    {"slug": "chunky", "id": "fALzjamp", "title": "Chunky", "description": "Generate the world ahead of time so it loads faster for friends."},
+    {"slug": "spark", "id": "l6YH9Als", "title": "spark", "description": "Find out what's making the world lag."},
+    {"slug": "ledger", "id": "LVN9ygNV", "title": "Ledger", "description": "Logs who broke or placed what, and can roll it back (Fabric only)."},
+]
+
+
+def addon_installed(inst: Instance, addon: dict) -> bool:
+    return _has_project(inst, addon["id"])
+
+
+def install_addon(inst: Instance, addon: dict, status=None) -> list[str]:
+    v = SOURCES["modrinth"].resolve_dep({"project_id": addon["id"]}, inst.mc_version, inst.loader)
+    if not v:
+        raise ContentError(f"{addon['title']} isn't available for {inst.loader} {inst.mc_version}.")
+    return install_version(inst, v, "mod", status=status)
 
 
 def _has_project(inst: Instance, pid: str) -> bool:

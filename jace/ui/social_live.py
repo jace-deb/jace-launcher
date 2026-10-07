@@ -15,6 +15,7 @@ class SocialLive(QObject):
     message = Signal(dict)      # {from, name, id}
     friends = Signal(dict)      # {kind: request|accepted|removed, uuid, name?}
     presence = Signal(dict)     # {uuid}
+    call = Signal(dict)         # {id, kind: offer|answer|hangup, call_id, from, name}
     connected = Signal(bool)
 
     def __init__(self, parent=None):
@@ -86,3 +87,5 @@ class SocialLive(QObject):
             self.friends.emit(payload)
         elif kind == "presence":
             self.presence.emit(payload)
+        elif kind == "call":
+            self.call.emit(payload)

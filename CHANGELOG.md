@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.0
+- **Voice calls with friends:** click **📞 Call** in a friend's chat. Audio goes directly between you, or through a relay when your networks don't allow a direct connection. While you play, the Jace Friends mod can start, answer, mute and hang up calls. That needs the game to be started from Jace Launcher.
+- **Server add-ons** (an instance's **Mods** tab): one-click LuckPerms, WorldEdit, Chunky, spark and Ledger for worlds you host for friends.
+- **Jace Store dependencies:** when a Jace Store mod lists dependencies (on Jace Store or Modrinth), they're installed with it.
+- **Jace Friends mod** now supports every release from 1.20.1 to 26.3 on Fabric/Quilt, NeoForge and Forge, with a **Host world** button and roles (Visitor / Builder / Admin) for friends who join.
+
 ## 1.1.0
 - **Synced friends list:** your friends are tied to your Minecraft account through Jace Social, so they follow you to any computer. Add friends by username, even if they haven't used Jace Launcher yet; they'll see your request when they sign in.
 - **Chat** with friends, with live notifications and unread badges.

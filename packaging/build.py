@@ -41,6 +41,7 @@ def pyinstaller(name: str, icon: Path, extra=()):
          "--add-data", f"{ASSETS}{os.pathsep}jace/assets",
          "--collect-all", "minecraft_launcher_lib",
          "--hidden-import", "PySide6.QtWebEngineWidgets", "--hidden-import", "PySide6.QtWebEngineCore",
+         "--hidden-import", "PySide6.QtMultimedia", "--collect-all", "aiortc",   # voice calls
          *extra, ROOT / "packaging" / "entry.py"])
     return BUILD / "dist"
 
@@ -127,6 +128,8 @@ def build_macos():
         "CFBundleVersion": APP_VERSION,
         "LSApplicationCategoryType": "public.app-category.games",
         "NSHighResolutionCapable": True,
+        # without this macOS blocks the microphone for voice calls
+        "NSMicrophoneUsageDescription": "Jace Launcher uses the microphone for voice calls with your friends.",
         "LSMinimumSystemVersion": macos_min_version(app),
     })
     with open(info, "wb") as f:

@@ -17,6 +17,14 @@ CONTENT_FOLDERS = {"mod": "mods", "resourcepack": "resourcepacks", "shader": "sh
                    "datapack": "datapacks"}
 
 
+def link_jvm_args() -> list[str]:
+    try:
+        from jace.ui import launcher_link
+    except Exception:  # noqa: BLE001 - no UI (e.g. command-line launch): no link
+        return []
+    return launcher_link.jvm_args()
+
+
 class Instance:
     def __init__(self, folder: Path):
         self.folder = Path(folder)
@@ -84,6 +92,7 @@ class Instance:
         mem = int(self.data.get("memory_mb") or settings.get("memory_mb"))
         jvm = [f"-Xmx{mem}M", f"-Xms{min(int(settings.get('min_memory_mb')), mem)}M"]
         extra = (self.data.get("jvm_args") or settings.get("jvm_args") or "").split()
+        extra += link_jvm_args()            # lets the Jace Friends mod reach the launcher (voice calls)
         java = (self.data.get("java_path") or "").strip() or java_for(vid)
         options = {
             "username": account["username"],

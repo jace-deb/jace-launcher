@@ -142,6 +142,19 @@ def set_presence(activity: dict | None, offline=False):
     return _call("POST", "/api/v1/presence", {"activity": activity, "offline": offline})
 
 
+def call_signal(to: str, call_id: str, kind: str, sdp: str | None = None):
+    """Voice call setup: kind is offer, answer or hangup."""
+    return _call("POST", "/api/v1/calls", {"to": to, "call_id": call_id, "kind": kind, "sdp": sdp})
+
+
+def read_call_signal(signal_id: int) -> dict:
+    return _call("GET", "/api/v1/calls", params={"id": signal_id})["signal"]
+
+
+def ice_servers() -> list[dict]:
+    return _call("GET", "/api/v1/calls/ice")["ice_servers"]
+
+
 def describe_activity(f: dict) -> str:
     """One-line status for a friend."""
     if not f.get("online"):
