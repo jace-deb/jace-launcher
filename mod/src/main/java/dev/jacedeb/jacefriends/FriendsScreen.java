@@ -4,17 +4,12 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
-import net.minecraft.client.gui.screens.ConnectScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.TitleScreen;
-import net.minecraft.client.multiplayer.ServerData;
-import net.minecraft.client.multiplayer.resolver.ServerAddress;
 import net.minecraft.client.server.IntegratedServer;
 import net.minecraft.network.chat.Component;
-import net.minecraft.server.MinecraftServer;
 
 import java.net.ServerSocket;
 import java.util.ArrayList;
@@ -118,7 +113,7 @@ public class FriendsScreen extends Screen {
 				int unread = r.f.has("unread") ? r.f.get("unread").getAsInt() : 0;
 				x -= 56;
 				addRenderableWidget(Button.builder(Component.literal(unread > 0 ? "Chat (" + unread + ")" : "Chat"),
-						b -> minecraft.gui.setScreen(new ChatScreen(this, r.f))).bounds(x, y, 56, 20).build());
+						b -> Compat.setScreen(new ChatScreen(this, r.f))).bounds(x, y, 56, 20).build());
 				if (!Social.joinAddress(r.f).isEmpty()) {
 					x -= 46;
 					addRenderableWidget(Button.builder(Component.literal("Join"), b -> join(r.f)).bounds(x, y, 44, 20).build());
@@ -183,10 +178,11 @@ public class FriendsScreen extends Screen {
 			status = Social.str(f, "name") + " is on Minecraft " + version + " - use that version to join";
 			return;
 		}
-		Minecraft mc = Minecraft.getInstance();
-		if (mc.level != null) mc.disconnectWithProgressScreen();
-		ConnectScreen.startConnecting(new TitleScreen(), mc, ServerAddress.parseString(addr),
-				new ServerData(Social.str(f, "name") + "'s world", addr, ServerData.Type.OTHER), false, null);
+		if (Minecraft.getInstance().level != null) {
+			status = "Leave your world first (Save and Quit), then click Join";
+			return;
+		}
+		Compat.connect(new TitleScreen(), addr, Social.str(f, "name") + "'s world");
 	}
 
 	private void host() {
@@ -198,8 +194,8 @@ public class FriendsScreen extends Screen {
 		} catch (Exception e) {
 			port = 25565;
 		}
-		if (sp.publishServer(MinecraftServer.MultiplayerScope.LAN, port)) {
-			status = FabricHelper.hasE4mc()
+		if (Compat.publishLan(sp, port)) {
+			status = (Compat.isModLoaded("e4mc_minecraft") || Compat.isModLoaded("e4mc"))
 					? "World opened! Waiting for e4mc to give it an address friends can join…"
 					: "Opened to LAN only. Install the e4mc mod so friends outside your network can join.";
 		} else {
@@ -208,9 +204,23 @@ public class FriendsScreen extends Screen {
 		rebuildWidgets();
 	}
 
+	//? if >=26.1 {
 	@Override
-	public void extractRenderState(GuiGraphicsExtractor g, int mouseX, int mouseY, float delta) {
+	public void extractRenderState(net.minecraft.client.gui.GuiGraphicsExtractor g, int mouseX, int mouseY, float delta) {
 		super.extractRenderState(g, mouseX, mouseY, delta);
+		drawContent(new Draw(g));
+	}
+	//?} else {
+	/*@Override
+	public void render(net.minecraft.client.gui.GuiGraphics g, int mouseX, int mouseY, float delta) {
+		//? if <1.20.2
+		/^renderBackground(g);^/
+		super.render(g, mouseX, mouseY, delta);
+		drawContent(new Draw(g));
+	}
+	*///?}
+
+	private void drawContent(Draw g) {
 		int cx = width / 2;
 		g.text(font, title.getString(), cx - font.width(title.getString()) / 2, 10, 0xFFFFFFFF);
 		g.text(font, status, cx - font.width(status) / 2, 22, 0xFFA0A6B0);
@@ -241,6 +251,6 @@ public class FriendsScreen extends Screen {
 
 	@Override
 	public void onClose() {
-		minecraft.gui.setScreen(parent);
+		Compat.setScreen(parent);
 	}
 }

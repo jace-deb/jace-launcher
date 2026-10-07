@@ -3,9 +3,7 @@ package dev.jacedeb.jacefriends;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.User;
 
 import java.net.URI;
 import java.net.URLEncoder;
@@ -59,11 +57,17 @@ public final class Social {
 	}
 
 	public static String myUuid() {
-		return Minecraft.getInstance().getUser().getProfileId().toString().replace("-", "");
+		return Compat.profileUuid();
 	}
 
 	private static Path sessionFile() {
-		return FabricLoader.getInstance().getConfigDir().resolve("jacefriends-session.json");
+		Path dir = Minecraft.getInstance().gameDirectory.toPath().resolve("config");
+		try {
+			Files.createDirectories(dir);
+		} catch (Exception ignored) {
+			// the write below reports the problem
+		}
+		return dir.resolve("jacefriends-session.json");
 	}
 
 	public static synchronized JsonObject session() {
@@ -92,8 +96,7 @@ public final class Social {
 
 	/** Verify this Minecraft account with Jace Social. Blocking. */
 	public static synchronized JsonObject signIn() throws Exception {
-		User user = Minecraft.getInstance().getUser();
-		String token = user.getAccessToken();
+		String token = Minecraft.getInstance().getUser().getAccessToken();
 		if (token == null || token.isBlank() || token.equals("0") || token.equals("FabricMC")) {
 			throw new SocialException("Friends and chat need a Microsoft account (offline accounts can't be verified).");
 		}
@@ -110,7 +113,7 @@ public final class Social {
 			throw new SocialException("Mojang didn't accept the sign-in. Restart the game from your launcher and try again.");
 		}
 		JsonObject finish = new JsonObject();
-		finish.addProperty("name", user.getName());
+		finish.addProperty("name", Minecraft.getInstance().getUser().getName());
 		finish.addProperty("server_id", serverId);
 		JsonObject s = call("POST", "/api/v1/auth/finish", finish, null, false).getAsJsonObject();
 		JsonObject all;

@@ -1,28 +1,27 @@
 {
-	"schemaVersion": 1,
-	"id": "jacefriends",
-	"version": "${version}",
-	"name": "Jace Friends",
-	"description": "Your Jace Launcher friends list and chat inside Minecraft. See who's online, chat, host your world for friends (with e4mc) and join theirs in one click.",
-	"authors": ["jace.deb"],
-	"contact": {
-		"homepage": "https://github.com/jace-deb/jace-launcher",
-		"sources": "https://github.com/jace-deb/jace-launcher/tree/main/mod",
-		"issues": "https://github.com/jace-deb/jace-launcher/issues"
-	},
-	"license": "MIT",
-	"icon": "assets/jacefriends/icon.png",
-	"environment": "client",
-	"entrypoints": {
-		"client": ["dev.jacedeb.jacefriends.JaceFriends"]
-	},
-	"depends": {
-		"fabricloader": ">=0.19.0",
-		"minecraft": "~26.3",
-		"java": ">=25",
-		"fabric-api": "*"
-	},
-	"suggests": {
-		"e4mc_minecraft": "*"
-	}
+  "schemaVersion": 1,
+  "id": "${id}",
+  "version": "${version}",
+  "name": "${name}",
+  "description": "Your Jace Launcher friends list and chat inside Minecraft. See who's online, chat, host your world for friends (with e4mc) and join theirs in one click.",
+  "authors": ["jace.deb"],
+  "contact": {
+    "homepage": "https://jace-store-deb.vercel.app/project/jace-friends",
+    "sources": "https://github.com/jace-deb/jace-launcher/tree/main/mod",
+    "issues": "https://github.com/jace-deb/jace-launcher/issues"
+  },
+  "license": "MIT",
+  "icon": "assets/jacefriends/icon.png",
+  "environment": "client",
+  "entrypoints": {
+    "client": ["dev.jacedeb.jacefriends.JaceFriendsFabric"]
+  },
+  "depends": {
+    "fabricloader": ">=${loader}",
+    "minecraft": "${minecraft}",
+    "fabric-api": "*"
+  },
+  "suggests": {
+    "e4mc_minecraft": "*"
+  }
 }

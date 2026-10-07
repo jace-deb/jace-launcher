@@ -3,14 +3,11 @@ package dev.jacedeb.jacefriends;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.client.input.KeyEvent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.FormattedCharSequence;
-import com.mojang.blaze3d.platform.InputConstants;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -84,18 +81,43 @@ public class ChatScreen extends Screen {
 		}));
 	}
 
+	//? if >=1.21.9 {
 	@Override
-	public boolean keyPressed(KeyEvent event) {
-		if ((event.input() == InputConstants.KEY_RETURN || event.input() == InputConstants.KEY_NUMPADENTER) && input.isFocused()) {
+	public boolean keyPressed(net.minecraft.client.input.KeyEvent event) {
+		if (Compat.isEnter(event.input()) && input.isFocused()) {
 			send();
 			return true;
 		}
 		return super.keyPressed(event);
 	}
+	//?} else {
+	/*@Override
+	public boolean keyPressed(int key, int scanCode, int modifiers) {
+		if (Compat.isEnter(key) && input.isFocused()) {
+			send();
+			return true;
+		}
+		return super.keyPressed(key, scanCode, modifiers);
+	}
+	*///?}
 
+	//? if >=26.1 {
 	@Override
-	public void extractRenderState(GuiGraphicsExtractor g, int mouseX, int mouseY, float delta) {
+	public void extractRenderState(net.minecraft.client.gui.GuiGraphicsExtractor g, int mouseX, int mouseY, float delta) {
 		super.extractRenderState(g, mouseX, mouseY, delta);
+		drawContent(new Draw(g));
+	}
+	//?} else {
+	/*@Override
+	public void render(net.minecraft.client.gui.GuiGraphics g, int mouseX, int mouseY, float delta) {
+		//? if <1.20.2
+		/^renderBackground(g);^/
+		super.render(g, mouseX, mouseY, delta);
+		drawContent(new Draw(g));
+	}
+	*///?}
+
+	private void drawContent(Draw g) {
 		int cx = width / 2;
 		g.text(font, title.getString(), cx - font.width(title.getString()) / 2, 10, 0xFFFFFFFF);
 		g.text(font, status, cx - font.width(status) / 2, 22, 0xFF8B919C);
@@ -125,7 +147,7 @@ public class ChatScreen extends Screen {
 
 	@Override
 	public void onClose() {
-		minecraft.gui.setScreen(parent);
+		Compat.setScreen(parent);
 		if (parent instanceof FriendsScreen f) f.reload();
 	}
 }

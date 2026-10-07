@@ -1,5 +1,7 @@
 .gradle/
 build/
 run/
+versions/*/build/
+.kotlin/
 *.iml
 .idea/

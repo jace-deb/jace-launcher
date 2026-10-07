@@ -1,0 +1,92 @@
+# Builds Jace Friends for every Minecraft version and loader, starts the game
+# with each build to prove it loads, and on a mod-v* tag publishes the jars to
+# Jace Store.
+name: Mod
+
+on:
+  push:
+    branches: [main]
+    paths: ["mod/**", ".github/workflows/mod.yml"]
+    tags: ["mod-v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        node:
+          - 1.20.1-fabric
+          - 1.20.1-forge
+          - 1.20.2-fabric
+          - 1.20.4-fabric
+          - 1.20.4-neoforge
+          - 1.20.6-fabric
+          - 1.20.6-neoforge
+          - 1.21.1-fabric
+          - 1.21.1-neoforge
+          - 1.21.3-fabric
+          - 1.21.3-neoforge
+          - 1.21.4-fabric
+          - 1.21.4-neoforge
+          - 1.21.5-fabric
+          - 1.21.5-neoforge
+          - 1.21.8-fabric
+          - 1.21.8-neoforge
+          - 1.21.10-fabric
+          - 1.21.10-neoforge
+          - 1.21.11-fabric
+          - 1.21.11-neoforge
+          - 26.1.2-fabric
+          - 26.1.2-neoforge
+          - 26.2-fabric
+          - 26.2-neoforge
+          - 26.3-fabric
+          - 26.3-neoforge
+    defaults:
+      run:
+        working-directory: mod
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: |
+            17
+            21
+            25
+      - name: Install a virtual screen and software OpenGL
+        run: sudo apt-get update && sudo apt-get install -y xvfb libgl1-mesa-dri libegl1 mesa-utils
+      - name: Build
+        run: ./gradlew ":${{ matrix.node }}:build" --no-daemon
+      - name: Start Minecraft with the mod
+        env:
+          LIBGL_ALWAYS_SOFTWARE: "1"
+        run: ci/smoke.sh "${{ matrix.node }}"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: jar-${{ matrix.node }}
+          path: mod/versions/${{ matrix.node }}/build/libs/*.jar
+          if-no-files-found: error
+
+  publish:
+    if: startsWith(github.ref, 'refs/tags/mod-v')
+    needs: build
+    runs-on: ubuntu-latest
+    env:
+      JACE_STORE_TOKEN: ${{ secrets.JACE_STORE_TOKEN }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          path: jars
+          merge-multiple: true
+      - name: Publish to Jace Store
+        run: |
+          if [ -z "$JACE_STORE_TOKEN" ]; then echo "::warning::JACE_STORE_TOKEN not set"; exit 0; fi
+          python3 packaging/publish_mod.py jars
