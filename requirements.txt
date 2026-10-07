@@ -4,3 +4,6 @@ requests>=2.31
 aiortc>=1.9          # voice calls (WebRTC)
 # PyAV 16+ only ships Apple Silicon wheels for macOS 14+; 14.0.1 still supports macOS 11+
 av==14.0.1; sys_platform == "darwin" and platform_machine == "arm64"
+# cryptography 49+ has no Intel Mac wheel, and building it links a macOS 15-only OpenSSL
+cryptography==48.0.1; sys_platform == "darwin" and platform_machine == "x86_64"
+pyopenssl==26.2.0; sys_platform == "darwin" and platform_machine == "x86_64"
