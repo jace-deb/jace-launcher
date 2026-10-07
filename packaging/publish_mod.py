@@ -4,7 +4,8 @@
 
 Each jar becomes its own version (e.g. "1.1.0+1.21.1-fabric") tagged with the
 Minecraft releases it supports and its loader, so launchers resolve the right one.
-Versions already on the store are skipped.
+Versions already on the store are skipped. Needs Jace Store's dependencies
+migration (008) for --depends.
 """
 import json
 import re
@@ -17,6 +18,8 @@ ROOT = Path(__file__).resolve().parent.parent
 CLI = ROOT / "packaging" / "jace-store.mjs"
 SLUG = "jace-friends"
 LOADERS = {"fabric": ["fabric", "quilt"], "neoforge": ["neoforge"], "forge": ["forge"]}
+# Jace Store lists these on the project page, and Jace Launcher installs them with the mod.
+DEPENDS = {"fabric": "modrinth:fabric-api,modrinth:e4all", "neoforge": "modrinth:e4all", "forge": "modrinth:e4all"}
 LOADER_NAMES = {"fabric": "Fabric/Quilt", "neoforge": "NeoForge", "forge": "Forge"}
 
 
@@ -61,7 +64,7 @@ def main():
         cmd = ["node", str(CLI), "publish", SLUG, "--version", number,
                "--name", f"Jace Friends {version} for {LOADER_NAMES[loader]} {span}",
                "--game-versions", ",".join(games), "--loaders", ",".join(LOADERS[loader]),
-               "--changelog", changelog(version), "--file", str(jar), "--json"]
+               "--changelog", changelog(version), "--depends", DEPENDS[loader], "--file", str(jar), "--json"]
         print(f"{number}: {', '.join(games)} · {', '.join(LOADERS[loader])}", flush=True)
         if dry:
             continue

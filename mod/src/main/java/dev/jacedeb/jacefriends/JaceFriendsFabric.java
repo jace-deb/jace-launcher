@@ -7,6 +7,7 @@ import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.message.v1.ClientReceiveMessageEvents;
 import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents;
 import net.fabricmc.fabric.api.client.screen.v1.Screens;
+import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.minecraft.client.gui.components.Button;
 
 /** Fabric (and Quilt) entry point. */
@@ -19,15 +20,17 @@ public class JaceFriendsFabric implements ClientModInitializer {
 		/*net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper.registerKeyBinding(JaceFriends.createKey());
 		*///?}
 		ClientTickEvents.END_CLIENT_TICK.register(JaceFriends::tick);
-		ClientReceiveMessageEvents.GAME.register((message, overlay) -> JaceFriends.onGameMessage(message.getString()));
+		ClientReceiveMessageEvents.GAME.register((message, overlay) -> JaceFriends.onGameMessage(message));
 		ScreenEvents.AFTER_INIT.register((mc, screen, w, h) -> {
-			Button b = JaceFriends.friendsButton(screen, w);
-			//? if >=26.1 {
-			if (b != null) Screens.getWidgets(screen).add(b);
-			//?} else {
-			/*if (b != null) Screens.getButtons(screen).add(b);
-			*///?}
+			for (Button b : JaceFriends.screenButtons(screen, w, h)) {
+				//? if >=26.1 {
+				Screens.getWidgets(screen).add(b);
+				//?} else {
+				/*Screens.getButtons(screen).add(b);
+				*///?}
+			}
 		});
+		ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> JaceFriends.onPlayerJoin(handler.player));
 		ClientLifecycleEvents.CLIENT_STOPPING.register(mc -> JaceFriends.stopping());
 	}
 }

@@ -27,10 +27,12 @@ public class JaceFriendsNeoForge {
 			if (e.phase == net.neoforged.neoforge.event.TickEvent.Phase.END) JaceFriends.tick(Minecraft.getInstance());
 		});
 		^///?}
-		NeoForge.EVENT_BUS.addListener((ClientChatReceivedEvent e) -> JaceFriends.onGameMessage(e.getMessage().getString()));
+		NeoForge.EVENT_BUS.addListener((ClientChatReceivedEvent e) -> JaceFriends.onGameMessage(e.getMessage()));
 		NeoForge.EVENT_BUS.addListener((ScreenEvent.Init.Post e) -> {
-			Button b = JaceFriends.friendsButton(e.getScreen(), e.getScreen().width);
-			if (b != null) e.addListener(b);
+			for (Button b : JaceFriends.screenButtons(e.getScreen(), e.getScreen().width, e.getScreen().height)) e.addListener(b);
+		});
+		NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.event.entity.player.PlayerEvent.PlayerLoggedInEvent e) -> {
+			if (e.getEntity() instanceof net.minecraft.server.level.ServerPlayer p) JaceFriends.onPlayerJoin(p);
 		});
 	}
 }

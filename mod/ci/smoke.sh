@@ -5,13 +5,16 @@
 set -u
 node="$1"
 loader="${node##*-}"
-mkdir -p run
 # skip the first-launch accessibility screen so the title screen comes up directly
-printf 'onboardAccessibility:false\nnarrator:0\nsoundCategory_master:0.0\n' > run/options.txt
+# (loaders differ on whether the game runs in run/ or versions/<node>/run/)
+for dir in run "versions/$node/run"; do
+  mkdir -p "$dir"
+  printf 'onboardAccessibility:false\nnarrator:0\nsoundCategory_master:0.0\n' > "$dir/options.txt"
+done
 task="runClient"
 log="smoke-$node.log"
 # own process group, so we can close the game (and only the game) afterwards
-setsid xvfb-run -a -s "-screen 0 1280x720x24" ./gradlew ":$node:$task" --no-daemon > "$log" 2>&1 &
+setsid xvfb-run -a -s "-screen 0 1280x720x24 +extension GLX +render -noreset" ./gradlew ":$node:$task" --no-daemon > "$log" 2>&1 &
 pid=$!
 result=timeout
 for _ in $(seq 1 180); do              # up to 15 minutes (first run downloads assets)

@@ -61,13 +61,28 @@ jobs:
             21
             25
       - name: Install a virtual screen and software OpenGL
-        run: sudo apt-get update && sudo apt-get install -y xvfb libgl1-mesa-dri libegl1 mesa-utils
+        run: sudo apt-get update && sudo apt-get install -y xvfb libgl1-mesa-dri libegl1 libglx-mesa0 mesa-utils mesa-vulkan-drivers
       - name: Build
         run: ./gradlew ":${{ matrix.node }}:build" --no-daemon
       - name: Start Minecraft with the mod
         env:
           LIBGL_ALWAYS_SOFTWARE: "1"
+          GALLIUM_DRIVER: llvmpipe
+          MESA_GL_VERSION_OVERRIDE: "4.6"
+          MESA_GLSL_VERSION_OVERRIDE: "460"
         run: ci/smoke.sh "${{ matrix.node }}"
+      - name: Upload game logs
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: logs-${{ matrix.node }}
+          path: |
+            mod/smoke-*.log
+            mod/run/logs/
+            mod/run/crash-reports/
+            mod/versions/${{ matrix.node }}/run/logs/
+            mod/versions/${{ matrix.node }}/run/crash-reports/
+          if-no-files-found: ignore
       - uses: actions/upload-artifact@v7
         with:
           name: jar-${{ matrix.node }}

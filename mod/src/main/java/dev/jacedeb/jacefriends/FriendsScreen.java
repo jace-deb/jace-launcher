@@ -11,7 +11,6 @@ import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.client.server.IntegratedServer;
 import net.minecraft.network.chat.Component;
 
-import java.net.ServerSocket;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -71,7 +70,46 @@ public class FriendsScreen extends Screen {
 	}
 
 	private int perPage() {
-		return Math.max(1, (height - 64 - 36) / ROW);
+		return Math.max(1, (height - 64 - 36 - (inCall() ? ROW : 0)) / ROW);
+	}
+
+	private static boolean inCall() {
+		return !Calls.state().equals("idle");
+	}
+
+	private void setStatus(String s) {
+		status = s;
+	}
+
+	/** The launcher says the call changed (ringing, answered, ended). */
+	void callChanged() {
+		rebuildWidgets();
+	}
+
+	/** Answer / Mute / Hang up, above the bottom buttons while there's a call. */
+	private void callButtons(int cx, int y) {
+		String state = Calls.state();
+		int x = cx + 154;
+		x -= 70;
+		addRenderableWidget(Button.builder(Component.literal(state.equals("ringing") ? "Decline" : "Hang up"),
+				b -> Calls.act(LauncherLink::hangUp, this::setStatus)).bounds(x, y, 70, 20).build());
+		if (state.equals("ringing")) {
+			x -= 64;
+			addRenderableWidget(Button.builder(Component.literal("Answer"), b -> Calls.act(LauncherLink::answer, this::setStatus))
+					.bounds(x, y, 62, 20).build());
+		} else if (state.equals("in-call")) {
+			x -= 64;
+			addRenderableWidget(Button.builder(Component.literal(Calls.muted() ? "Unmute" : "Mute"),
+					b -> Calls.act(LauncherLink::toggleMute, this::setStatus)).bounds(x, y, 62, 20).build());
+		}
+	}
+
+	private static String callText() {
+		return switch (Calls.state()) {
+			case "calling" -> "Calling " + Calls.peerName() + "…";
+			case "ringing" -> Calls.peerName() + " is calling you";
+			default -> "In a call with " + Calls.peerName() + (Calls.muted() ? " (muted)" : "");
+		};
 	}
 
 	@Override
@@ -114,6 +152,11 @@ public class FriendsScreen extends Screen {
 				x -= 56;
 				addRenderableWidget(Button.builder(Component.literal(unread > 0 ? "Chat (" + unread + ")" : "Chat"),
 						b -> Compat.setScreen(new ChatScreen(this, r.f))).bounds(x, y, 56, 20).build());
+				if (r.f.get("online").getAsBoolean() && Calls.state().equals("idle")) {
+					x -= 42;
+					addRenderableWidget(Button.builder(Component.literal("Call"), b -> Calls.call(r.f, this::setStatus))
+							.bounds(x, y, 40, 20).build());
+				}
 				if (!Social.joinAddress(r.f).isEmpty()) {
 					x -= 46;
 					addRenderableWidget(Button.builder(Component.literal("Join"), b -> join(r.f)).bounds(x, y, 44, 20).build());
@@ -123,9 +166,10 @@ public class FriendsScreen extends Screen {
 		}
 
 		int by = height - 28;
+		if (inCall()) callButtons(cx, by - ROW);
 		IntegratedServer sp = minecraft.getSingleplayerServer();
 		if (sp != null && !sp.isPublished()) {
-			addRenderableWidget(Button.builder(Component.literal("Host this world for friends"), b -> host())
+			addRenderableWidget(Button.builder(Component.literal("Host this world for friends"), b -> Compat.setScreen(new HostScreen(this)))
 					.bounds(cx - 154, by, 150, 20).build());
 		}
 		if (rows.size() > per) {
@@ -174,7 +218,7 @@ public class FriendsScreen extends Screen {
 	private void join(JsonObject f) {
 		String addr = Social.joinAddress(f);
 		String version = Social.str(Social.activity(f), "version");
-		if (!version.isEmpty() && !version.equals(JaceFriends.VERSION)) {
+		if (!version.isEmpty() && !version.equals(Compat.mcVersion())) {
 			status = Social.str(f, "name") + " is on Minecraft " + version + " - use that version to join";
 			return;
 		}
@@ -183,25 +227,6 @@ public class FriendsScreen extends Screen {
 			return;
 		}
 		Compat.connect(new TitleScreen(), addr, Social.str(f, "name") + "'s world");
-	}
-
-	private void host() {
-		IntegratedServer sp = minecraft.getSingleplayerServer();
-		if (sp == null) return;
-		int port;
-		try (ServerSocket s = new ServerSocket(0)) {
-			port = s.getLocalPort();
-		} catch (Exception e) {
-			port = 25565;
-		}
-		if (Compat.publishLan(sp, port)) {
-			status = (Compat.isModLoaded("e4mc_minecraft") || Compat.isModLoaded("e4mc"))
-					? "World opened! Waiting for e4mc to give it an address friends can join…"
-					: "Opened to LAN only. Install the e4mc mod so friends outside your network can join.";
-		} else {
-			status = "Couldn't open the world";
-		}
-		rebuildWidgets();
 	}
 
 	//? if >=26.1 {
@@ -242,6 +267,10 @@ public class FriendsScreen extends Screen {
 			};
 			g.text(font, font.plainSubstrByWidth(line, 170), left + 10, y + 11, 0xFF8B919C);
 			y += ROW;
+		}
+		if (inCall()) {
+			g.fill(left, height - 52 + 6, left + 6, height - 52 + 12, 0xFF3DDC84);
+			g.text(font, font.plainSubstrByWidth(callText(), 170), left + 10, height - 52 + 6, 0xFFFFFFFF);
 		}
 		if (data != null && rows.isEmpty()) {
 			String hint = "No friends yet - add one by their Minecraft username above";

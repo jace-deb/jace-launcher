@@ -19,9 +19,7 @@
   "depends": {
     "fabricloader": ">=${loader}",
     "minecraft": "${minecraft}",
-    "fabric-api": "*"
-  },
-  "suggests": {
-    "e4mc_minecraft": "*"
+    "fabric-api": "*",
+    "e4all": "*"
   }
 }

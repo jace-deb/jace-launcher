@@ -18,3 +18,10 @@ type = "required"
 versionRange = "${minecraft}"
 ordering = "NONE"
 side = "CLIENT"
+
+[[dependencies.${id}]]
+modId = "e4all"
+type = "required"
+versionRange = "[0,)"
+ordering = "NONE"
+side = "CLIENT"

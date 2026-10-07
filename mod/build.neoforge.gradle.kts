@@ -28,7 +28,8 @@ repositories {
 }
 
 dependencies {
-
+    // e4all (required at runtime: hosts worlds publicly); in the dev/test client only
+    runtimeOnly("maven.modrinth:e4all:${sc.properties.get<String>("deps.e4all")}")
 }
 
 neoForge {

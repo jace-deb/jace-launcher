@@ -112,6 +112,29 @@ public final class Compat {
 		*///?}
 	}
 
+	/** Run a command on the integrated server as the server itself (no chat output). */
+	public static void runCommand(net.minecraft.server.MinecraftServer server, String command) {
+		server.getCommands().performPrefixedCommand(server.createCommandSourceStack().withSuppressedOutput(), command);
+	}
+
+	/** Minecraft's own Friends screen (26.2+), which we replace with Jace Friends. */
+	public static boolean isVanillaFriends(Screen screen) {
+		//? if >=26.2 {
+		return screen instanceof net.minecraft.client.gui.screens.friends.FriendsOverlayScreen;
+		//?} else {
+		/*return false;
+		*///?}
+	}
+
+	/** The World Options screen (26.3+), which gets a "Host world" button. */
+	public static boolean isWorldOptions(Screen screen) {
+		//? if >=26.3 {
+		return screen instanceof net.minecraft.client.gui.screens.WorldOptionsScreen;
+		//?} else {
+		/*return false;
+		*///?}
+	}
+
 	public static boolean isEnter(int key) {
 		return key == InputConstants.KEY_RETURN || key == InputConstants.KEY_NUMPADENTER;
 	}

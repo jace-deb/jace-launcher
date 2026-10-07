@@ -62,6 +62,7 @@ public class ChatScreen extends Screen {
 		setInitialFocus(input);
 		addRenderableWidget(Button.builder(Component.literal("Send"), b -> send()).bounds(cx + 100, height - 30, 60, 20).build());
 		addRenderableWidget(Button.builder(Component.literal("< Back"), b -> onClose()).bounds(6, 6, 60, 20).build());
+		addRenderableWidget(Button.builder(Component.literal("Call"), b -> Calls.call(friend, s -> status = s)).bounds(width - 66, 6, 60, 20).build());
 	}
 
 	private void send() {
