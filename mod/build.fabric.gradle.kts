@@ -46,8 +46,9 @@ dependencies {
     modImplementation("net.fabricmc.fabric-api:fabric-api:${sc.properties.get<String>("deps.fabric_api")}")
     // e4all (required at runtime: hosts worlds publicly), in the dev/test client only.
     // Before 26.1 the real jar can't load in a Mojang-mapped dev client (its mixins target
-    // production names), so those versions get a stand-in instead (see runConfigs below).
+    // production names), so those versions get an empty stand-in mod instead.
     if (sc.current.parsed >= "26.1") modLocalRuntime("maven.modrinth:e4all:${sc.properties.get<String>("deps.e4all")}")
+    else runtimeOnly(files(rootProject.file("ci/e4all-stub")))   // classpath mods load as-is, no remapping
 }
 
 loom {
@@ -62,7 +63,6 @@ loom {
         generateRunConfig = true
         runDirectory = rootProject.file("run") // Shares the run directory between versions
         jvmArguments.add("-Dmixin.debug.export=true") // Exports transformed classes for debugging
-        if (sc.current.parsed < "26.1") jvmArguments.add("-Dfabric.addMods=${rootProject.file("ci/e4all-stub").absolutePath}")
     }
 }
 
