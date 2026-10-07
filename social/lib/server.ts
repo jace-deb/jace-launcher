@@ -41,7 +41,7 @@ export const sha256 = (s: string) => createHash("sha256").update(s).digest("hex"
 export function handler(fn: (req: Request) => Promise<unknown>) {
   return async (req: Request) => {
     try {
-      return Response.json(await fn(req));
+      return Response.json(await fn(req), { headers: { "Access-Control-Allow-Origin": "*" } });
     } catch (e) {
       if (e instanceof ApiError) return Response.json({ error: e.message }, { status: e.status });
       console.error(e);

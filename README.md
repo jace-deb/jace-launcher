@@ -1,5 +1,7 @@
 # ⛏ Jace Launcher
 
+**Website:** https://jace-deb.github.io/jace-launcher/ · **Jace Social:** https://jace-deb.github.io/jace-launcher/social.html
+
 A desktop launcher for Minecraft: Java Edition, written in Python and Qt (PySide6).
 
 ## Features
