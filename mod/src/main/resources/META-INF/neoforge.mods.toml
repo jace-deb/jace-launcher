@@ -21,7 +21,7 @@ side = "CLIENT"
 
 [[dependencies.${id}]]
 modId = "e4all"
-type = "required"
+type = "${e4all_type}"
 versionRange = "[0,)"
 ordering = "NONE"
 side = "CLIENT"

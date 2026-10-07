@@ -28,8 +28,10 @@ repositories {
 }
 
 dependencies {
-    // e4all (required at runtime: hosts worlds publicly); in the dev/test client only
-    runtimeOnly("maven.modrinth:e4all:${sc.properties.get<String>("deps.e4all")}")
+    // e4all (required at runtime: hosts worlds publicly); in the dev/test client only.
+    // Blank for versions where e4all itself doesn't work; it's optional there.
+    val e4all = sc.properties.get<String>("deps.e4all")
+    if (e4all.isNotBlank()) runtimeOnly("maven.modrinth:e4all:$e4all")
 }
 
 neoForge {
@@ -77,6 +79,7 @@ tasks {
             register("name", sc.properties["mod.name"])
             register("version", sc.properties["mod.version"])
             register("minecraft", sc.properties["mod.mc_compat"])
+            register("e4all_type", if (sc.properties.get<String>("deps.e4all").isBlank()) "optional" else "required")
         }
 
         // NeoForge before 1.20.5 still read META-INF/mods.toml (computed here so the

@@ -19,13 +19,20 @@ CLI = ROOT / "packaging" / "jace-store.mjs"
 SLUG = "jace-friends"
 LOADERS = {"fabric": ["fabric", "quilt"], "neoforge": ["neoforge"], "forge": ["forge"]}
 # Jace Store lists these on the project page, and Jace Launcher installs them with the mod.
-DEPENDS = {"fabric": "modrinth:fabric-api,modrinth:e4all", "neoforge": "modrinth:e4all", "forge": "modrinth:e4all"}
+# (e4all is left out where stonecutter.properties.toml has a blank deps.e4all: it doesn't work there)
+DEPENDS = {"fabric": ["modrinth:fabric-api"], "neoforge": [], "forge": []}
 LOADER_NAMES = {"fabric": "Fabric/Quilt", "neoforge": "NeoForge", "forge": "Forge"}
 
 
 def releases() -> dict:
     props = tomllib.loads((ROOT / "mod" / "stonecutter.properties.toml").read_text())
     return {k: v["mod"]["mc_releases"] for k, v in props.items() if isinstance(v, dict) and "mod" in v}
+
+
+def depends(loader: str, mc: str) -> str:
+    props = tomllib.loads((ROOT / "mod" / "stonecutter.properties.toml").read_text())
+    e4all = props.get(loader, {}).get(mc, {}).get("deps", {}).get("e4all", "")
+    return ",".join(DEPENDS[loader] + (["modrinth:e4all"] if e4all else []))
 
 
 def changelog(version: str) -> str:
@@ -64,7 +71,9 @@ def main():
         cmd = ["node", str(CLI), "publish", SLUG, "--version", number,
                "--name", f"Jace Friends {version} for {LOADER_NAMES[loader]} {span}",
                "--game-versions", ",".join(games), "--loaders", ",".join(LOADERS[loader]),
-               "--changelog", changelog(version), "--depends", DEPENDS[loader], "--file", str(jar), "--json"]
+               "--changelog", changelog(version), "--file", str(jar), "--json"]
+        if depends(loader, mc):
+            cmd += ["--depends", depends(loader, mc)]
         print(f"{number}: {', '.join(games)} · {', '.join(LOADERS[loader])}", flush=True)
         if dry:
             continue

@@ -9,45 +9,37 @@ on:
     paths: ["mod/**", ".github/workflows/mod.yml"]
     tags: ["mod-v*"]
   workflow_dispatch:
+    inputs:
+      nodes:
+        description: "Only these targets, comma-separated (e.g. 1.21.1-fabric,1.20.4-neoforge). Empty = all."
+        required: false
+        default: ""
 
 permissions:
   contents: read
 
 jobs:
+  targets:
+    runs-on: ubuntu-latest
+    outputs:
+      nodes: ${{ steps.pick.outputs.nodes }}
+    steps:
+      - id: pick
+        env:
+          ALL: "1.20.1-fabric,1.20.1-forge,1.20.2-fabric,1.20.4-fabric,1.20.4-neoforge,1.20.6-fabric,1.20.6-neoforge,1.21.1-fabric,1.21.1-neoforge,1.21.3-fabric,1.21.3-neoforge,1.21.4-fabric,1.21.4-neoforge,1.21.5-fabric,1.21.5-neoforge,1.21.8-fabric,1.21.8-neoforge,1.21.10-fabric,1.21.10-neoforge,1.21.11-fabric,1.21.11-neoforge,26.1.2-fabric,26.1.2-neoforge,26.2-fabric,26.2-neoforge,26.3-fabric,26.3-neoforge"
+          ONLY: ${{ github.event.inputs.nodes }}
+        run: |
+          list="${ONLY:-$ALL}"
+          echo "nodes=$(echo "$list" | tr -d ' ' | jq -Rc 'split(",") | map(select(length > 0))')" >> "$GITHUB_OUTPUT"
+
   build:
+    needs: targets
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
-        node:
-          - 1.20.1-fabric
-          - 1.20.1-forge
-          - 1.20.2-fabric
-          - 1.20.4-fabric
-          - 1.20.4-neoforge
-          - 1.20.6-fabric
-          - 1.20.6-neoforge
-          - 1.21.1-fabric
-          - 1.21.1-neoforge
-          - 1.21.3-fabric
-          - 1.21.3-neoforge
-          - 1.21.4-fabric
-          - 1.21.4-neoforge
-          - 1.21.5-fabric
-          - 1.21.5-neoforge
-          - 1.21.8-fabric
-          - 1.21.8-neoforge
-          - 1.21.10-fabric
-          - 1.21.10-neoforge
-          - 1.21.11-fabric
-          - 1.21.11-neoforge
-          - 26.1.2-fabric
-          - 26.1.2-neoforge
-          - 26.2-fabric
-          - 26.2-neoforge
-          - 26.3-fabric
-          - 26.3-neoforge
+        node: ${{ fromJSON(needs.targets.outputs.nodes) }}
     defaults:
       run:
         working-directory: mod

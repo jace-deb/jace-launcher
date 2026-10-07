@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "id": "e4all",
+  "version": "0.0.0-dev-stub",
+  "name": "e4all (dev stand-in)",
+  "description": "Only used by Jace Friends' dev/test client on Minecraft before 26.1: the real e4all jar targets production (intermediary) names and can't load in a Mojang-mapped dev environment."
+}

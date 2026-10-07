@@ -37,7 +37,8 @@ mod.mc_compat = ">=1.20.3 <=1.20.4"
 deps.fabric_api = "0.97.3+1.20.4"
 
 [neoforge."1.20.4"]
-deps.e4all = "IY6O0mHI"  # e4all 2.1.2-neoforge
+# e4all 2.1.2 crashes on NeoForge 1.20.4 (bad mixin descriptor), so it's optional here
+deps.e4all = ""
 mod.mc_compat = "[1.20.3,1.20.4]"
 deps.neo_loader = "20.4.251"
 
