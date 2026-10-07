@@ -53,7 +53,15 @@ jobs:
             21
             25
       - name: Install a virtual screen and software OpenGL
-        run: sudo apt-get update && sudo apt-get install -y xvfb libgl1-mesa-dri libegl1 libglx-mesa0 mesa-utils mesa-vulkan-drivers
+        timeout-minutes: 12
+        # Ubuntu's package mirrors sometimes hang: give each try 4 minutes, up to 3 tries
+        run: |
+          for try in 1 2 3; do
+            timeout 240 sudo apt-get -o Acquire::Retries=3 update &&
+            timeout 240 sudo apt-get install -y xvfb libgl1-mesa-dri libegl1 libglx-mesa0 mesa-utils mesa-vulkan-drivers && exit 0
+            echo "apt try $try failed, retrying"; sleep 10
+          done
+          exit 1
       - name: Build
         run: ./gradlew ":${{ matrix.node }}:build" --no-daemon
       - name: Start Minecraft with the mod
