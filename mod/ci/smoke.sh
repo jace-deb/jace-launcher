@@ -10,7 +10,8 @@ mkdir -p run
 printf 'onboardAccessibility:false\nnarrator:0\nsoundCategory_master:0.0\n' > run/options.txt
 task="runClient"
 log="smoke-$node.log"
-xvfb-run -a -s "-screen 0 1280x720x24" ./gradlew ":$node:$task" --no-daemon > "$log" 2>&1 &
+# own process group, so we can close the game (and only the game) afterwards
+setsid xvfb-run -a -s "-screen 0 1280x720x24" ./gradlew ":$node:$task" --no-daemon > "$log" 2>&1 &
 pid=$!
 result=timeout
 for _ in $(seq 1 180); do              # up to 15 minutes (first run downloads assets)
@@ -20,8 +21,8 @@ for _ in $(seq 1 180); do              # up to 15 minutes (first run downloads a
   if ! kill -0 $pid 2>/dev/null; then result=exited; break; fi
 done
 grep -E "\[Jace Friends\]|Loading [0-9]+ mods|jacefriends|ERROR|Exception" "$log" | grep -v "^\s*at " | head -25
-pkill -f "xvfb-run|Xvfb" 2>/dev/null
-pkill -f "$node" 2>/dev/null
-kill $pid 2>/dev/null
 echo "SMOKE $node: $result"
+kill -- -"$pid" 2>/dev/null       # the whole group: gradle, the game and Xvfb
+sleep 2
+kill -9 -- -"$pid" 2>/dev/null
 [ "$result" = ok ]

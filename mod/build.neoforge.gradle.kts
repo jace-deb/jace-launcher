@@ -78,10 +78,12 @@ tasks {
             register("minecraft", sc.properties["mod.mc_compat"])
         }
 
+        // NeoForge before 1.20.5 still read META-INF/mods.toml (computed here so the
+        // file action below doesn't capture build-script objects)
+        val tomlName = if (sc.current.parsed < "1.20.5") "mods.toml" else "neoforge.mods.toml"
         filesMatching("META-INF/neoforge.mods.toml") {
             expand(props)
-            // NeoForge before 1.20.5 still read META-INF/mods.toml
-            if (sc.current.parsed < "1.20.5") name = "mods.toml"
+            name = tomlName
         }
 
         val mixinJava = "JAVA_${requiredJava.majorVersion}"
