@@ -1,4 +1,4 @@
-"""Local link between Jace Launcher and the Jace Friends mod in a running game.
+"""Local link between Jace Launcher and the Jace Social mod in a running game.
 
 The launcher listens on 127.0.0.1 (random port) and starts games with
 -Djacelauncher.link=PORT:TOKEN. The mod uses it for voice calls:

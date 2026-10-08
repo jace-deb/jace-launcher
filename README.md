@@ -1,6 +1,6 @@
 # ⛏ Jace Launcher
 
-**Website:** https://jace-deb.github.io/jace-launcher/ · **Jace Social:** https://jace-deb.github.io/jace-launcher/social.html
+**Website:** https://jace-deb.github.io/jace-launcher/ · **Jace Social:** https://jace-deb.github.io/jace-social/
 
 A desktop launcher for Minecraft: Java Edition, written in Python and Qt (PySide6).
 
@@ -30,8 +30,8 @@ A desktop launcher for Minecraft: Java Edition, written in Python and Qt (PySide
   - a local skin library you can apply with a double-click
 - **Accounts**: Microsoft sign-in, plus offline accounts for singleplayer and offline-mode servers.
 - **Friends list**: add friends by Minecraft username and see their skin. Save the server they play on to see if they're online there, and click **Join** to launch straight into it. There's no Jace Launcher server, so "online" only works on servers that share their player list.
-- **Voice calls**: call a friend from their chat. In game, the Jace Friends mod controls the call through the launcher. That only works when the game was started from Jace Launcher.
-- **Server add-ons**: one-click LuckPerms, WorldEdit, Chunky, spark and Ledger (an instance's **Mods** tab) for worlds you host with Jace Friends.
+- **Voice calls**: call a friend from their chat. In game, the Jace Social mod controls the call through the launcher. That only works when the game was started from Jace Launcher.
+- **Server add-ons**: one-click LuckPerms, WorldEdit, Chunky, spark and Ledger (an instance's **Mods** tab) for worlds you host with the Jace Social mod.
 - **Game log** window, plus per-instance memory, Java and JVM argument overrides.
 
 ## Running

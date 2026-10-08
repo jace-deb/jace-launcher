@@ -1,4 +1,4 @@
-"""Voice call state for the launcher UI and for the Jace Friends mod (through the link server)."""
+"""Voice call state for the launcher UI and for the Jace Social mod (through the link server)."""
 from __future__ import annotations
 
 import secrets

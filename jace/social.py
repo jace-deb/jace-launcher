@@ -155,6 +155,31 @@ def ice_servers() -> list[dict]:
     return _call("GET", "/api/v1/calls/ice")["ice_servers"]
 
 
+def me() -> dict:
+    """Your Jace Social profile, including which accounts are linked."""
+    return _call("GET", "/api/v1/me")
+
+
+def start_link_jace() -> dict:
+    """Begin linking a Jace account -> {url, state, poll_key}. Open url in a browser, then poll."""
+    return _call("POST", "/api/v1/link/jace", {})
+
+
+def poll_link_jace(state: str, key: str, timeout: float = 300) -> dict:
+    """Wait (blocking) until the browser part of linking is done -> {jace_name}."""
+    end = time.time() + timeout
+    while time.time() < end:
+        r = _call("GET", "/api/v1/auth/jace/poll", params={"state": state, "key": key})
+        if not r.get("pending"):
+            return r
+        time.sleep(2)
+    raise SocialError("Linking timed out - try again")
+
+
+def unlink_jace():
+    return _call("DELETE", "/api/v1/link/jace")
+
+
 def describe_activity(f: dict) -> str:
     """One-line status for a friend."""
     if not f.get("online"):

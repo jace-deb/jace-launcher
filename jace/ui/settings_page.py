@@ -2,6 +2,7 @@
 import os
 import subprocess
 import sys
+import webbrowser
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QUrl, Signal
@@ -9,9 +10,9 @@ from PySide6.QtGui import QDesktopServices, QPixmap
 from PySide6.QtWidgets import (QCheckBox, QComboBox, QFileDialog, QFormLayout, QGroupBox, QHBoxLayout, QLabel,
                                QLineEdit, QMessageBox, QPushButton, QScrollArea, QSizePolicy, QSpinBox, QVBoxLayout, QWidget)
 
-from jace import desktop
+from jace import desktop, social
 from jace.config import DATA_DIR, settings
-from jace.ui.common import run_task
+from jace.ui.common import run_task, show_error
 
 
 def total_ram_mb() -> int:
@@ -207,6 +208,24 @@ class SettingsPage(QWidget):
         row.addWidget(save)
         lay.addLayout(row)
 
+        # --- Jace Social: link a Jace account to your Minecraft one
+        g = QGroupBox("Jace Social")
+        f = QHBoxLayout(g)
+        self.jace_status = self._muted("Sign in on the Friends page to link accounts.")
+        self.jace_status.setTextFormat(Qt.TextFormat.RichText)
+        self.jace_status.setOpenExternalLinks(True)
+        f.addWidget(self.jace_status, 1)
+        self.jace_btn = QPushButton("Link Jace")
+        self.jace_btn.setObjectName("primary")
+        self.jace_btn.clicked.connect(self._jace_clicked)
+        self.jace_btn.hide()
+        open_app = QPushButton("Open Jace Social")
+        open_app.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(social.base_url() + "/app")))
+        f.addWidget(self.jace_btn)
+        f.addWidget(open_app)
+        lay.addWidget(g)
+        self._jace = None
+
         # --- About
         from jace import APP_VERSION, AUTHOR, GITHUB_URL, desktop as _desk
         g = QGroupBox("About")
@@ -241,6 +260,59 @@ class SettingsPage(QWidget):
         f.addWidget(db)
         lay.addWidget(g)
         lay.addStretch()
+
+    # --- Jace Social account linking
+    def showEvent(self, e):
+        super().showEvent(e)
+        self._refresh_jace()
+
+    def _refresh_jace(self):
+        if not social.current_session():
+            self.jace_status.setText("Sign in to Jace Social on the Friends page first, then link your Jace account "
+                                     "to use Jace Social on the web and in the desktop app.")
+            self.jace_btn.hide()
+            return
+
+        def done(m):
+            self._jace = m
+            if m.get("jace_linked"):
+                self.jace_status.setText(f"Linked to Jace account <b>@{m.get('jace_name') or '?'}</b>. You can sign in "
+                                         f"to Jace Social on the web and in the desktop app with it.")
+                self.jace_btn.setText("Unlink")
+                self.jace_btn.setObjectName("")
+            else:
+                self.jace_status.setText("Link your Jace account to use Jace Social on the web and in the desktop app. "
+                                         "Your friends, chats and servers stay the same everywhere.")
+                self.jace_btn.setText("Link Jace")
+                self.jace_btn.setObjectName("primary")
+            self.jace_btn.style().polish(self.jace_btn)
+            self.jace_btn.show()
+        run_task(social.me, on_done=done, on_error=lambda msg: self.jace_status.setText(msg))
+
+    def _jace_clicked(self):
+        if self._jace and self._jace.get("jace_linked"):
+            if QMessageBox.question(self, "Unlink Jace", "Unlink your Jace account? You'll sign in to Jace Social "
+                                    "with Minecraft only.") != QMessageBox.StandardButton.Yes:
+                return
+            run_task(social.unlink_jace, on_done=lambda _: self._refresh_jace(),
+                     on_error=lambda msg: show_error(self, msg))
+            return
+        self.jace_btn.setEnabled(False)
+        self.jace_status.setText("Finish signing in to Jace in your browser…")
+
+        def work():
+            start = social.start_link_jace()
+            webbrowser.open(start["url"])               # (background thread: not Qt)
+            return social.poll_link_jace(start["state"], start["poll_key"])
+
+        def done(_):
+            self.jace_btn.setEnabled(True)
+            self._refresh_jace()
+
+        def fail(msg):
+            self.jace_btn.setEnabled(True)
+            self.jace_status.setText(msg)
+        run_task(work, on_done=done, on_error=fail)
 
     def _path_label(self, text):
         """A label for long paths that shrinks (clipping) instead of widening the page."""

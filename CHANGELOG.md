@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.3.0
+- **Jace Social:** the friends system is now its own project, with a web app and a desktop app at <https://jace-deb.github.io/jace-social/>. The in-game mod is now called Jace Social too.
+- **Settings → Jace Social → Link Jace:** link your Jace account, so you can sign in to Jace Social on the web and in the desktop app. Your friends, chats and servers are the same everywhere.
+- Friends now see more of what you're doing while you play from Jace Launcher: your mod loader, modpack and how long you've been playing.
+
 ## 1.2.1
 - **Voice calls on older Macs:** fixed "Voice calls aren't available in this build" on macOS 12 and 13. Some libraries in 1.2.0 needed macOS 14 (Apple Silicon) or macOS 15 (Intel).
 

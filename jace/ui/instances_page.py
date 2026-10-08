@@ -136,7 +136,7 @@ class NewInstanceDialog(QDialog):
 
 
 class AddonsDialog(QDialog):
-    """One-click server mods (LuckPerms, WorldEdit, ...) for worlds hosted with Jace Friends."""
+    """One-click server mods (LuckPerms, WorldEdit, ...) for worlds hosted with the Jace Social mod."""
 
     def __init__(self, inst: Instance, parent=None):
         super().__init__(parent)
@@ -144,7 +144,7 @@ class AddonsDialog(QDialog):
         self.setWindowTitle("Server add-ons")
         self.setMinimumWidth(560)
         lay = QVBoxLayout(self)
-        intro = QLabel("These run on worlds you host for friends with Jace Friends' <b>Host world</b> button.")
+        intro = QLabel("These run on worlds you host for friends with the Jace Social mod's <b>Host world</b> button.")
         intro.setWordWrap(True)
         lay.addWidget(intro)
         self.status = QLabel("")

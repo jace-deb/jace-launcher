@@ -305,7 +305,7 @@ class FriendsPage(QWidget):
             self.signin_text.setText(
                 "<p style='font-size:16px'><b>Friends & chat, everywhere</b></p>"
                 "<p>Your friends list is synced to your Minecraft account, so it follows you to any computer "
-                "and into the game with the <b>Jace Friends</b> mod. Chat with friends and join the worlds "
+                "and into the game with the <b>Jace Social</b> mod, the web and the desktop app. Chat with friends and join the worlds "
                 "they're hosting in one click.</p>"
                 + (f"<p style='color:#e0b44a'>{html.escape(why)}</p>" if why else ""))
             self.signin_btn.setEnabled(why is None)

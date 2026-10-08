@@ -2,6 +2,7 @@
 import subprocess
 import sys
 import threading
+import time
 
 from PySide6.QtCore import QTimer, Signal
 from PySide6.QtGui import QFont, QIcon, QPixmap, QTextCursor
@@ -166,6 +167,7 @@ class MainWindow(QMainWindow):
         self.friends_page.unread_changed.connect(self._unread_changed)
         self.friends_page.signed_in.connect(self._social_signed_in)
         self.playing = None          # (instance, server) while a game launched from here runs
+        self._playing_since = None
         self.live = SocialLive(self)
         self.live.message.connect(self._on_social_message)
         self.live.message.connect(self.friends_page.on_message)
@@ -303,10 +305,13 @@ class MainWindow(QMainWindow):
     def _activity(self):
         if self.playing:
             inst, server = self.playing
-            if any(p.name.startswith("jace-friends") for p in inst.content_dir("mod").glob("*.jar")):
-                return None          # the Jace Friends mod reports richer status from inside the game
-            return {"type": "playing", "instance": inst.name, "version": inst.mc_version, "server": server}
-        return {"type": "launcher"}
+            if any(p.name.startswith(("jacefriends", "jace-friends", "jacesocial"))
+                   for p in inst.content_dir("mod").glob("*.jar")):
+                return None          # the Jace Social mod reports richer status from inside the game
+            return {"type": "playing", "instance": inst.name, "version": inst.mc_version, "loader": inst.loader,
+                    "modpack": (inst.data.get("modpack") or {}).get("name") if isinstance(inst.data.get("modpack"), dict) else None, "server": server,
+                    "started_at": self._playing_since, "app": "jace-launcher"}
+        return {"type": "launcher", "app": "jace-launcher"}
 
     def _send_presence(self):
         if not social.current_session():
@@ -410,6 +415,7 @@ class MainWindow(QMainWindow):
         def started(proc):
             self.notify(f"Playing {inst.name}")
             self.playing = (inst, server)
+            self._playing_since = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
             self._send_presence()
             self.library.refresh(inst.id)
             con = GameConsole(inst.name, proc, self)

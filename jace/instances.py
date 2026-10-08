@@ -92,7 +92,7 @@ class Instance:
         mem = int(self.data.get("memory_mb") or settings.get("memory_mb"))
         jvm = [f"-Xmx{mem}M", f"-Xms{min(int(settings.get('min_memory_mb')), mem)}M"]
         extra = (self.data.get("jvm_args") or settings.get("jvm_args") or "").split()
-        extra += link_jvm_args()            # lets the Jace Friends mod reach the launcher (voice calls)
+        extra += link_jvm_args()            # lets the Jace Social mod reach the launcher (voice calls)
         java = (self.data.get("java_path") or "").strip() or java_for(vid)
         options = {
             "username": account["username"],

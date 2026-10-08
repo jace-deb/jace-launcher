@@ -289,10 +289,10 @@ def install_version(inst: Instance, version: dict, kind: str, with_deps=True, st
 
 # -- Server add-ons --------------------------------------------------------------------
 # Mod versions of popular server plugins. They run on the world you host from
-# singleplayer (Jace Friends' "Host world"), so friends get permissions, WorldEdit, etc.
+# singleplayer (Jace Social's "Host world"), so friends get permissions, WorldEdit, etc.
 SERVER_ADDONS = [
     {"slug": "luckperms", "id": "Vebnzrzj", "title": "LuckPerms",
-     "description": "Custom permissions. Jace Friends puts players in jace_visitor, jace_builder and jace_admin groups."},
+     "description": "Custom permissions. Jace Social puts players in jace_visitor, jace_builder and jace_admin groups."},
     {"slug": "worldedit", "id": "1u6JkXh5", "title": "WorldEdit", "description": "Build and edit huge areas with commands and the wand."},
     {"slug": "chunky", "id": "fALzjamp", "title": "Chunky", "description": "Generate the world ahead of time so it loads faster for friends."},
     {"slug": "spark", "id": "l6YH9Als", "title": "spark", "description": "Find out what's making the world lag."},
