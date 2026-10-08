@@ -194,6 +194,8 @@ class FriendsPage(QWidget):
         super().__init__()
         self.setObjectName("page")
         self.data = {"friends": [], "incoming": [], "outgoing": []}
+        self._signing_in = False          # Jace Social signs in automatically with your Minecraft account
+        self._sign_in_error = ""
         outer = QVBoxLayout(self)
         outer.setContentsMargins(28, 24, 28, 24)
         top = QHBoxLayout()
@@ -239,12 +241,8 @@ class FriendsPage(QWidget):
         self.signin_text = QLabel()
         self.signin_text.setWordWrap(True)
         self.signin_text.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.signin_btn = QPushButton("Sign in to Jace Social")
-        self.signin_btn.setObjectName("primary")
-        self.signin_btn.clicked.connect(self.sign_in)
         sl.addStretch()
         sl.addWidget(self.signin_text)
-        sl.addWidget(self.signin_btn, 0, Qt.AlignmentFlag.AlignHCenter)
         sl.addStretch()
         outer.addWidget(self.signin, 1)
 
@@ -302,35 +300,47 @@ class FriendsPage(QWidget):
         else:
             self.who.setText("")
             self._poll.stop()
+            if self._signing_in:
+                note = "<p style='color:#8b919c'>Signing in to Jace Social…</p>"
+            elif self._sign_in_error:
+                note = (f"<p style='color:#e0b44a'>Couldn't sign in: {html.escape(self._sign_in_error)}</p>"
+                        "<p style='color:#8b919c'>It'll try again next time you open Friends.</p>")
+            else:
+                note = f"<p style='color:#e0b44a'>{html.escape(why)}</p>" if why else ""
             self.signin_text.setText(
                 "<p style='font-size:16px'><b>Friends & chat, everywhere</b></p>"
                 "<p>Your friends list is synced to your Minecraft account, so it follows you to any computer "
                 "and into the game with the <b>Jace Social</b> mod, the web and the desktop app. Chat with friends and join the worlds "
-                "they're hosting in one click.</p>"
-                + (f"<p style='color:#e0b44a'>{html.escape(why)}</p>" if why else ""))
-            self.signin_btn.setEnabled(why is None)
+                "they're hosting in one click.</p>" + note)
 
     def showEvent(self, e):
         super().showEvent(e)
         self.update_mode()
         if social.current_session():
             self.refresh()
+        else:
+            self.auto_sign_in()
 
-    def sign_in(self):
-        self.signin_btn.setEnabled(False)
-        self.signin_btn.setText("Signing in…")
+    def auto_sign_in(self):
+        """Sign in to Jace Social with the selected Microsoft account, quietly.
+        Called at startup, when the account changes and when Friends opens."""
+        if self._signing_in or social.current_session() or social.can_sign_in():
+            return
+        self._signing_in = True
+        self._sign_in_error = ""
+        self.update_mode()
 
         def done(s):
-            self.signin_btn.setText("Sign in to Jace Social")
+            self._signing_in = False
             self.update_mode()
             self.signed_in.emit(s)
             self.refresh()
             self._offer_migration()
 
         def fail(msg):
-            self.signin_btn.setText("Sign in to Jace Social")
-            self.signin_btn.setEnabled(True)
-            show_error(self, msg, "Couldn't sign in")
+            self._signing_in = False
+            self._sign_in_error = msg
+            self.update_mode()
         run_task(social.sign_in, on_done=done, on_error=fail)
 
     def _offer_migration(self):

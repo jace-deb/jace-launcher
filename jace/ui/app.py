@@ -286,6 +286,7 @@ class MainWindow(QMainWindow):
             self.live.stop()
             self._presence_timer.stop()
             self._unread_changed(0)
+            self.friends_page._sign_in_error = ""   # new account: try again straight away
             self.friends_page.update_mode()
             self._start_social()
 
@@ -293,6 +294,7 @@ class MainWindow(QMainWindow):
     def _start_social(self):
         s = social.current_session()
         if not s:
+            self.friends_page.auto_sign_in()    # signs in on its own, then calls back here
             return
         self.live.start(s.get("realtime") or {}, s.get("inbox", ""))
         self._presence_timer.start()
