@@ -25,9 +25,12 @@ repositories {
     }
     strictMaven("https://www.cursemaven.com", "CurseForge", "curse.maven")
     strictMaven("https://api.modrinth.com/maven", "Modrinth", "maven.modrinth")
+    mavenCentral()
 }
 
 dependencies {
+    // LuckPerms API: only used when LuckPerms is installed (the permissions menus)
+    compileOnly("net.luckperms:api:5.4")
     // e4all (required at runtime: hosts worlds publicly); in the dev/test client only.
     // Blank for versions where e4all itself doesn't work; it's optional there.
     val e4all = sc.properties.get<String>("deps.e4all")

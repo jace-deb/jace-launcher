@@ -40,7 +40,7 @@ public class HostScreen extends Screen {
 	}
 
 	private int perPage() {
-		return Math.max(1, (height - 64 - 60) / ROW);
+		return Math.max(1, (height - 64 - 64) / ROW);
 	}
 
 	@Override
@@ -59,6 +59,11 @@ public class HostScreen extends Screen {
 		}
 
 		int by = height - 28;
+		// permission menus (they explain what to install if LuckPerms / WorldEdit are missing)
+		addRenderableWidget(Button.builder(Component.literal("LuckPerms…"), b -> Compat.setScreen(new LuckPermsScreen(this)))
+				.bounds(cx - 154, by - 24, 100, 20).build());
+		addRenderableWidget(Button.builder(Component.literal("WorldEdit…"), b -> Compat.setScreen(new WorldEditScreen(this)))
+				.bounds(cx - 50, by - 24, 100, 20).build());
 		IntegratedServer sp = minecraft.getSingleplayerServer();
 		if (sp != null && !sp.isPublished()) {
 			addRenderableWidget(Button.builder(Component.literal("Start hosting"), b -> host()).bounds(cx - 154, by, 110, 20).build());
@@ -140,10 +145,6 @@ public class HostScreen extends Screen {
 			g.text(font, Social.str(friends.get(i), "name"), left, y + 6, 0xFFFFFFFF);
 			y += ROW;
 		}
-		String help = Compat.isModLoaded("luckperms")
-				? "LuckPerms groups: jace_visitor, jace_builder, jace_admin"
-				: "Visitor: look only · Builder: build · Admin: op";
-		g.text(font, help, cx - font.width(help) / 2, height - 44, 0xFF8B919C);
 	}
 
 	@Override

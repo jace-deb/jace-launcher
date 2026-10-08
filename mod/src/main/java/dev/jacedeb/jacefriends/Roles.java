@@ -69,6 +69,17 @@ public final class Roles {
 		return of("default");
 	}
 
+	/** Does everyone with this role get WorldEdit when they join? (Admins always do.) */
+	public static boolean worldEdit(Role role) {
+		JsonObject d = data();
+		return role == Role.ADMIN || (d.has("worldedit:" + role.name()) && d.get("worldedit:" + role.name()).getAsBoolean());
+	}
+
+	public static void setWorldEdit(Role role, boolean on) {
+		data().addProperty("worldedit:" + role.name(), on);
+		save();
+	}
+
 	public static void set(String uuid, Role role) {
 		data().addProperty(uuid, role.name());
 		save();
@@ -81,13 +92,29 @@ public final class Roles {
 		String name = player.getName().getString();
 		Role role = of(uuid);
 		switch (role) {
-			case VISITOR -> { run(server, "deop " + name); run(server, "gamemode adventure " + name); }
-			case BUILDER -> { run(server, "deop " + name); run(server, "gamemode survival " + name); }
-			case ADMIN -> run(server, "op " + name);
+			case VISITOR -> run(server, "gamemode adventure " + name);
+			case BUILDER -> run(server, "gamemode survival " + name);
+			case ADMIN -> { }
+		}
+		// Admins are operators. WorldEdit can also be switched on per role (see WorldEditScreen).
+		boolean we = worldEdit(role);
+		if (WorldEditScreen.usesLuckPerms()) {
+			Compat.setOp(server, player, role == Role.ADMIN);
+			try {
+				LuckPermsBridge.setUserPermission(player.getUUID(), "worldedit.*", we ? Boolean.TRUE : null);
+			} catch (RuntimeException ignored) {
+				// LuckPerms not started yet
+			}
+		} else {
+			Compat.setOp(server, player, role == Role.ADMIN || we);
 		}
 		if (Compat.isModLoaded("luckperms")) {
-			for (Role r : Role.values()) run(server, "lp creategroup jace_" + r.name().toLowerCase());
-			run(server, "lp user " + name + " parent set jace_" + role.name().toLowerCase());
+			try {
+				LuckPermsBridge.ensureRoleGroups()
+						.thenCompose(v -> LuckPermsBridge.setUserGroup(player.getUUID(), "jace_" + role.name().toLowerCase()));
+			} catch (RuntimeException ignored) {
+				// LuckPerms not started yet: they keep their old group
+			}
 		}
 		Minecraft.getInstance().execute(() -> Compat.toast(joined ? "Friend joined" : "Role changed", name + (joined ? " joined as " : " is now ") + role.label));
 	}

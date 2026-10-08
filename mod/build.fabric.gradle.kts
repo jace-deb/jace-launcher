@@ -30,9 +30,12 @@ repositories {
     }
     strictMaven("https://www.cursemaven.com", "CurseForge", "curse.maven")
     strictMaven("https://api.modrinth.com/maven", "Modrinth", "maven.modrinth")
+    mavenCentral()
 }
 
 dependencies {
+    // LuckPerms API: only used when LuckPerms is installed (the permissions menus)
+    compileOnly("net.luckperms:api:5.4")
     /**
      * Fetches only the required Fabric API modules to not waste time downloading all of them for each version.
      * @see <a href="https://github.com/FabricMC/fabric">List of Fabric API modules</a>

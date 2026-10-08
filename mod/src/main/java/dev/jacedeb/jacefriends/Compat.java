@@ -117,6 +117,29 @@ public final class Compat {
 		server.getCommands().performPrefixedCommand(server.createCommandSourceStack().withSuppressedOutput(), command);
 	}
 
+	/** Is the player on the server's ops list? (Run on the server thread.) */
+	public static boolean isOp(net.minecraft.server.MinecraftServer server, net.minecraft.server.level.ServerPlayer p) {
+		//? if >=1.21.9 {
+		return server.getPlayerList().isOp(p.nameAndId());
+		//?} else {
+		/*return server.getPlayerList().isOp(p.getGameProfile());
+		*///?}
+	}
+
+	/**
+	 * Add to / remove from the ops list. Singleplayer has no /op command, but the list
+	 * still exists and mods like WorldEdit check it. (Run on the server thread.)
+	 */
+	public static void setOp(net.minecraft.server.MinecraftServer server, net.minecraft.server.level.ServerPlayer p, boolean op) {
+		//? if >=1.21.9 {
+		if (op) server.getPlayerList().op(p.nameAndId());
+		else server.getPlayerList().deop(p.nameAndId());
+		//?} else {
+		/*if (op) server.getPlayerList().op(p.getGameProfile());
+		else server.getPlayerList().deop(p.getGameProfile());
+		*///?}
+	}
+
 	/** Minecraft's own Friends screen (26.2+), which we replace with Jace Friends. */
 	public static boolean isVanillaFriends(Screen screen) {
 		//? if >=26.2 {
