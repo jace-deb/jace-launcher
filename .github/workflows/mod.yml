@@ -63,7 +63,8 @@ jobs:
           done
           exit 1
       - name: Build
-        run: ./gradlew ":${{ matrix.node }}:build" --no-daemon
+        # retry once: the plugin/library servers occasionally time out
+        run: ./gradlew ":${{ matrix.node }}:build" --no-daemon || { sleep 30; ./gradlew ":${{ matrix.node }}:build" --no-daemon --refresh-dependencies; }
       - name: Start Minecraft with the mod
         env:
           LIBGL_ALWAYS_SOFTWARE: "1"
