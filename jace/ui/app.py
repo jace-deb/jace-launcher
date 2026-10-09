@@ -307,7 +307,7 @@ class MainWindow(QMainWindow):
     def _activity(self):
         if self.playing:
             inst, server = self.playing
-            if any(p.name.startswith(("jacefriends", "jace-friends", "jacesocial"))
+            if any(p.name.startswith(("jacefriends", "jace-friends", "jacesocial", "jace_social"))
                    for p in inst.content_dir("mod").glob("*.jar")):
                 return None          # the Jace Social mod reports richer status from inside the game
             return {"type": "playing", "instance": inst.name, "version": inst.mc_version, "loader": inst.loader,
