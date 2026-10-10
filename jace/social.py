@@ -143,12 +143,28 @@ def set_presence(activity: dict | None, offline=False):
 
 
 def call_signal(to: str, call_id: str, kind: str, sdp: str | None = None):
-    """Voice call setup: kind is offer, answer or hangup."""
+    """Voice call setup: kind is offer, answer, hangup, renegotiate or reanswer."""
     return _call("POST", "/api/v1/calls", {"to": to, "call_id": call_id, "kind": kind, "sdp": sdp})
 
 
 def read_call_signal(signal_id: int) -> dict:
     return _call("GET", "/api/v1/calls", params={"id": signal_id})["signal"]
+
+
+def voice_room(channel_id: str, action: str | None = None, **state) -> dict:
+    """A voice room (server voice channel or group call): who's in it, or join / leave / state."""
+    if action is None:
+        return _call("GET", f"/api/v1/channels/{channel_id}/voice")
+    return _call("POST", f"/api/v1/channels/{channel_id}/voice", {"action": action, **state})
+
+
+def voice_signal(channel_id: str, to: str, kind: str, sdp: str):
+    """Connection setup with someone in the same voice room: kind is offer or answer."""
+    return _call("POST", "/api/v1/voice/signal", {"channel_id": channel_id, "to": to, "kind": kind, "sdp": sdp})
+
+
+def read_voice_signal(signal_id: int) -> dict:
+    return _call("GET", "/api/v1/voice/signal", params={"id": signal_id})["signal"]
 
 
 def ice_servers() -> list[dict]:

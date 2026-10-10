@@ -226,11 +226,17 @@ class FriendsPage(QWidget):
         self.answer_btn = QPushButton("Answer")
         self.answer_btn.setObjectName("primary")
         self.mute_btn = QPushButton("Mute")
+        self.deafen_btn = QPushButton("Deafen")
+        self.camera_btn = QPushButton("📷  Camera")
+        self.camera_btn.setCheckable(True)
+        self.screen_btn = QPushButton("🖥️  Share screen")
+        self.screen_btn.setCheckable(True)
         self.watch_btn = QPushButton("📷  Watch in Jace Social")
         self.watch_btn.setToolTip("Video only works in Jace Social: this moves the call there")
         self.hangup_btn = QPushButton("Hang up")
         self.hangup_btn.setObjectName("danger")
-        for w in (self.answer_btn, self.watch_btn, self.mute_btn, self.hangup_btn):
+        for w in (self.answer_btn, self.watch_btn, self.camera_btn, self.screen_btn, self.mute_btn, self.deafen_btn,
+                  self.hangup_btn):
             cb.addWidget(w)
         self.call_bar.hide()
         outer.addWidget(self.call_bar)
@@ -267,16 +273,53 @@ class FriendsPage(QWidget):
         self.update_mode()
 
     # --- voice calls
-    def set_calls(self, calls):
-        self.calls = calls
+    def set_calls(self, calls, rooms):
+        """The call bar: a call with a friend, or a voice channel / group call (joined from the game)."""
+        self.calls, self.rooms = calls, rooms
+        in_room = lambda: bool(rooms.channel_id)  # noqa: E731
         self.answer_btn.clicked.connect(calls.answer)
-        self.mute_btn.clicked.connect(calls.toggle_mute)
-        self.watch_btn.clicked.connect(calls.watch)
-        self.hangup_btn.clicked.connect(lambda: calls.hang_up())
+        self.mute_btn.clicked.connect(lambda: rooms.toggle_mute() if in_room() else calls.toggle_mute())
+        self.deafen_btn.clicked.connect(rooms.toggle_deafen)
+        self.camera_btn.clicked.connect(lambda: rooms.toggle_video("camera") if in_room() else calls.toggle_video("camera"))
+        self.screen_btn.clicked.connect(lambda: rooms.toggle_video("screen") if in_room() else calls.toggle_video("screen"))
+        self.watch_btn.clicked.connect(lambda: rooms.watch() if in_room() else calls.watch())
+        self.hangup_btn.clicked.connect(lambda: rooms.leave() if in_room() else calls.hang_up())
         calls.changed.connect(self._call_changed)
+        rooms.changed.connect(self._call_changed)
+        calls.error.connect(lambda _m: self._call_changed())    # e.g. no camera: un-press its button
+        rooms.error.connect(lambda _m: self._call_changed())
 
     def _call_changed(self):
-        c = self.calls
+        c, r = self.calls, self.rooms
+        if r.channel_id:
+            st = r.status()
+            others = [p for p in st["participants"] if not p["me"]]
+            video = [p["name"] for p in others if p["camera"] or p["screen"]]
+            text = (f"🔊  <b>{html.escape(r.channel_name)}</b>"
+                    + (" · connecting…" if r.connecting else f" · {len(others)} other{'' if len(others) == 1 else 's'} here")
+                    + (" (muted)" if r.muted else "") + (" (deafened)" if r.deafened else "")
+                    + (f" · 📷 {html.escape(', '.join(video))}" if video else ""))
+            self.call_text.setText(text)
+            self.call_bar.show()
+            self.answer_btn.hide()
+            for b in (self.mute_btn, self.deafen_btn, self.watch_btn, self.camera_btn, self.screen_btn):
+                b.setVisible(not r.connecting)
+            self.camera_btn.setVisible(not r.connecting and r.can_video)
+            self.screen_btn.setVisible(not r.connecting and r.can_video)
+            self.camera_btn.setChecked(st["camera"])
+            self.screen_btn.setChecked(st["sharing"])
+            self.watch_btn.setVisible(bool(video))
+            self.mute_btn.setText("Unmute" if r.muted else "Mute")
+            self.deafen_btn.setText("Undeafen" if r.deafened else "Deafen")
+            self.hangup_btn.setText("Leave")
+            self.chat.call_btn.setEnabled(False)
+            return
+        self.deafen_btn.hide()
+        st = c.status()
+        self.camera_btn.setVisible(c.state == "in-call")
+        self.screen_btn.setVisible(c.state == "in-call")
+        self.camera_btn.setChecked(st["camera"])
+        self.screen_btn.setChecked(st["sharing"])
         name = html.escape(c.peer_name or "a friend")
         text = {"calling": f"📞  Calling <b>{name}</b>…", "ringing": f"📞  <b>{name}</b> is calling you",
                 "in-call": f"🔊  In a call with <b>{name}</b>" + (" (muted)" if c.muted else "")

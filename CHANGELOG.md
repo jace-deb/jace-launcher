@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.4.0
+- **Voice channels and group calls** from the Jace Social mod: join a server's voice channel or a group chat's call in game. Everyone in it connects to everyone, like in the Jace Social app. The call bar here shows it too, with Mute, Deafen and Leave.
+- **Camera and screen sharing** in calls and voice channels: **📷 Camera** and **🖥️ Share screen** in the call bar (or in game) send your camera or your main screen. People see them in Jace Social; the launcher stays voice-only for what others send, and **Watch in Jace Social** opens it there.
+- Several people talking at once are mixed together.
+- Fixes calls breaking when you turned something on mid-call after answering someone using a browser.
+
 ## 1.3.2
 - **Calls with video:** when the friend you're calling turns on their camera or shares their screen, the call bar says so and shows **Watch in Jace Social**. That moves the call to Jace Social in your browser, where you can see it; they don't have to do anything. The Jace Social mod gets the same button (mod 1.4.1).
 - Calls keep working when the other person turns their camera or screen sharing on and off. The launcher stays voice-only and doesn't download their video.

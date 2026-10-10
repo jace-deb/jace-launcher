@@ -6,6 +6,10 @@ The launcher listens on 127.0.0.1 (random port) and starts games with
   POST /call            {uuid, name}  start a call
   POST /call/answer | /call/hangup | /call/mute
   POST /call/watch      open the call in Jace Social (to see their camera / screen)
+  POST /call/camera | /call/screen     turn your camera / screen sharing on or off
+  POST /voice/join      {channel_id, name, server_id}  join a voice channel or group call
+  POST /voice/leave | /voice/mute | /voice/deafen | /voice/camera | /voice/screen | /voice/watch
+GET /call also has "voice": the voice room you're in (or null).
 Every request needs the X-Jace-Token header, so other programs can't use it.
 """
 from __future__ import annotations
@@ -47,8 +51,9 @@ class _MainThread(QObject):
 
 
 class LauncherLink:
-    def __init__(self, calls):
+    def __init__(self, calls, rooms):
         self.calls = calls
+        self.rooms = rooms
         self.token = secrets.token_urlsafe(24)
         self.main = _MainThread()
         link = self
@@ -87,8 +92,17 @@ class LauncherLink:
                     b = json.loads(self.rfile.read(n) or b"{}")
                 except ValueError:
                     b = {}
-                c = link.calls
+                c, r = link.calls, link.rooms
                 actions = {
+                    "/call/camera": lambda: c.toggle_video("camera"),
+                    "/call/screen": lambda: c.toggle_video("screen"),
+                    "/voice/join": lambda: r.join(str(b.get("channel_id", "")), str(b.get("name", "")), str(b.get("server_id", ""))),
+                    "/voice/leave": r.leave,
+                    "/voice/mute": r.toggle_mute,
+                    "/voice/deafen": r.toggle_deafen,
+                    "/voice/camera": lambda: r.toggle_video("camera"),
+                    "/voice/screen": lambda: r.toggle_video("screen"),
+                    "/voice/watch": r.watch,
                     "/call": lambda: c.call(str(b.get("uuid", "")), str(b.get("name", ""))),
                     "/call/answer": c.answer,
                     "/call/hangup": c.hang_up,
@@ -119,10 +133,10 @@ class LauncherLink:
 _link: LauncherLink | None = None
 
 
-def start(calls) -> LauncherLink:
+def start(calls, rooms) -> LauncherLink:
     global _link
     if _link is None:
-        _link = LauncherLink(calls)
+        _link = LauncherLink(calls, rooms)
     return _link
 
 

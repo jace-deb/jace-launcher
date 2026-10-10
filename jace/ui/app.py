@@ -20,7 +20,7 @@ from jace.ui.common import STYLE, run_task, show_error
 from jace.ui.friends_page import FriendsPage
 from jace.ui.social_live import SocialLive
 from jace.ui import launcher_link
-from jace.ui.calls import CallManager
+from jace.ui.calls import CallManager, Media, RoomManager
 from jace.instance_icons import icon_image
 from jace.instances import list_instances
 from jace.ui.installer import FirstRunDialog, SetupWizard, confirm_uninstall
@@ -173,12 +173,17 @@ class MainWindow(QMainWindow):
         self.live.message.connect(self.friends_page.on_message)
         self.live.friends.connect(self._on_social_friends)
         self.live.presence.connect(self.friends_page.on_change)
-        self.calls = CallManager(self)
+        self.media = Media(self)
+        self.calls = CallManager(self.media, self)
+        self.rooms = RoomManager(self.media, self.calls, self)
         self.live.call.connect(self.calls.on_live)
+        self.live.voice.connect(self.rooms.on_voice)
+        self.live.voice_signal.connect(self.rooms.on_signal)
         self.calls.error.connect(lambda m: self.notify(f"📞  {m}"))
+        self.rooms.error.connect(lambda m: self.notify(f"🔊  {m}"))
         self.calls.incoming.connect(self._incoming_call)
-        self.friends_page.set_calls(self.calls)
-        launcher_link.start(self.calls)
+        self.friends_page.set_calls(self.calls, self.rooms)
+        launcher_link.start(self.calls, self.rooms)
         self._presence_timer = QTimer(self, interval=120_000)
         self._presence_timer.timeout.connect(self._send_presence)
         QTimer.singleShot(1500, self._start_social)

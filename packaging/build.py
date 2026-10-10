@@ -140,6 +140,7 @@ def build_macos():
         "NSHighResolutionCapable": True,
         # without this macOS blocks the microphone for voice calls
         "NSMicrophoneUsageDescription": "Jace Launcher uses the microphone for voice calls with your friends.",
+        "NSCameraUsageDescription": "Jace Launcher uses the camera when you turn it on in a call.",
         "LSMinimumSystemVersion": macos_min_version(app),
     })
     with open(info, "wb") as f:
