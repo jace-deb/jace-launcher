@@ -292,7 +292,12 @@ def install_version(inst: Instance, version: dict, kind: str, with_deps=True, st
 # singleplayer (Jace Social's "Host world"), so friends get permissions, WorldEdit, etc.
 SERVER_ADDONS = [
     {"slug": "luckperms", "id": "Vebnzrzj", "title": "LuckPerms",
-     "description": "Custom permissions. Jace Social puts players in jace_visitor, jace_builder and jace_admin groups."},
+     "description": "Custom permissions. Jace Social puts players in jace_visitor, jace_builder and jace_admin groups.",
+     # LuckPerms' Fabric build only runs on dedicated servers, so Fabric skips it in the game
+     # client (singleplayer and hosted worlds). The Jace Social mod has its own permissions there.
+     "server_only_on": ["fabric", "quilt"],
+     "server_only_note": "Not needed here: on Fabric, LuckPerms only runs on dedicated servers. In worlds you host, "
+                         "the Jace Social mod's own permissions do the same job (Host world → Permissions)."},
     {"slug": "worldedit", "id": "1u6JkXh5", "title": "WorldEdit", "description": "Build and edit huge areas with commands and the wand."},
     {"slug": "chunky", "id": "fALzjamp", "title": "Chunky", "description": "Generate the world ahead of time so it loads faster for friends."},
     {"slug": "spark", "id": "l6YH9Als", "title": "spark", "description": "Find out what's making the world lag."},

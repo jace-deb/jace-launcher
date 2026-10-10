@@ -152,12 +152,17 @@ class AddonsDialog(QDialog):
         self.status.setWordWrap(True)
         for addon in content.SERVER_ADDONS:
             row = QHBoxLayout()
-            text = QLabel(f"<b>{addon['title']}</b><br><span style='color:#8b919c'>{addon['description']}</span>")
+            server_only = inst.loader in addon.get("server_only_on", [])
+            desc = addon["server_only_note"] if server_only else addon["description"]
+            text = QLabel(f"<b>{addon['title']}</b><br><span style='color:#8b919c'>{desc}</span>")
             text.setWordWrap(True)
             row.addWidget(text, 1)
             btn = QPushButton()
             btn.setMinimumWidth(96)
             self._set(btn, content.addon_installed(inst, addon))
+            if server_only and not content.addon_installed(inst, addon):
+                btn.setText("Not needed")
+                btn.setEnabled(False)
             btn.clicked.connect(lambda _=False, a=addon, b=btn: self._install(a, b))
             row.addWidget(btn)
             lay.addLayout(row)

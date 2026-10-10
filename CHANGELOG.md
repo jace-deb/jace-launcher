@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.3.1
+- **Jace Social mod 1.4 and later:** your friends see the mod's in-game status again. The mod's files are now named `jace_social_…jar`, and the launcher didn't recognise them.
+- **Server add-ons:** LuckPerms is no longer offered on Fabric and Quilt. There it only runs on dedicated servers, so it did nothing in worlds you host. The Jace Social mod's own permissions do that job (Host world → Permissions).
+
 ## 1.3.0
 - **Jace Social:** the friends system is now its own project, with a web app and a desktop app at <https://jace-deb.github.io/jace-social/>. The in-game mod is now called Jace Social too.
 - **No more "Sign in to Jace Social" button:** friends and chat sign in automatically with your Microsoft Minecraft account at startup, and when you add or switch accounts.
