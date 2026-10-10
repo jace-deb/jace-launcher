@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import secrets
+from urllib.parse import quote
 
 from PySide6.QtCore import QObject, QTimer, Signal
 
@@ -21,6 +22,7 @@ class CallManager(QObject):
         self.peer_name = ""
         self.call_id = ""
         self.muted = False
+        self.peer_camera = self.peer_screen = False   # they turned on their camera / are sharing their screen
         self._offer_sdp = ""
         self._engine: voice.Engine | None = None
         self._source = self._sink = self._mic = self._speaker = None
@@ -35,7 +37,7 @@ class CallManager(QObject):
     # -- public
     def status(self) -> dict:
         return {"state": self.state, "peer": self.peer, "peer_name": self.peer_name, "muted": self.muted,
-                "available": voice.available() is None}
+                "peer_camera": self.peer_camera, "peer_screen": self.peer_screen, "available": voice.available() is None}
 
     def call(self, uuid: str, name: str):
         """Start a call; returns why not (also shown in the launcher), or None."""
@@ -59,7 +61,7 @@ class CallManager(QObject):
         peer, call_id, offer = self.peer, self.call_id, self._offer_sdp
 
         def work():
-            sdp = self._get_engine().make_answer(offer, social.ice_servers())
+            sdp = self._get_engine().make_answer(_strip_tags(offer), social.ice_servers())
             social.call_signal(peer, call_id, "answer", sdp)
 
         self._set("in-call")
@@ -73,6 +75,17 @@ class CallManager(QObject):
         run_task(social.call_signal, peer, call_id, "hangup", on_error=lambda m: None)
         self._end(reason)
 
+    def watch(self):
+        """Video only works in Jace Social: open this call there. The web app takes the call over
+        (same call id, the other side doesn't ring) and we drop out once it's connected."""
+        if self.state != "in-call":
+            return "You're not in a call"
+        from PySide6.QtCore import QUrl
+        from PySide6.QtGui import QDesktopServices
+        QDesktopServices.openUrl(QUrl(f"{social.base_url()}/app#move_call={self.call_id}&peer={self.peer}"
+                                      f"&name={quote(self.peer_name)}"))
+        return None
+
     def toggle_mute(self):
         self.muted = not self.muted
         if self._engine:
@@ -83,12 +96,15 @@ class CallManager(QObject):
     def on_live(self, e: dict):
         kind, call_id = e.get("kind"), e.get("call_id", "")
         if kind == "offer":
-            if self.state != "idle":                    # busy: tell them
-                run_task(social.call_signal, e.get("from", ""), call_id, "hangup", on_error=lambda m: None)
-                return
-
             def got(sig):
-                if self.state != "idle":
+                moving = MOVE_TAG in sig["sdp"]           # someone moving a call between their own devices
+                if self.state == "in-call" and call_id == self.call_id and sig["sender"] == self.peer:
+                    self._take_over(sig["sdp"])           # ...namely the one they're in with us
+                    return
+                if moving:
+                    return
+                if self.state != "idle":                  # busy: tell them
+                    run_task(social.call_signal, sig["sender"], call_id, "hangup", on_error=lambda m: None)
                     return
                 self.call_id, self._offer_sdp = call_id, sig["sdp"]
                 self._set("ringing", sig["sender"], sig.get("name") or e.get("name", ""))
@@ -99,16 +115,48 @@ class CallManager(QObject):
             return
         elif kind == "answer" and self.state == "calling":
             def go():
-                self._get_engine().set_answer(social.read_call_signal(e["id"])["sdp"])
+                self._get_engine().set_answer(_strip_tags(social.read_call_signal(e["id"])["sdp"]))
             self._timeout.stop()
             self._set("in-call")
             self._start_audio()
             run_task(go, on_error=self._failed)
+        elif kind == "answer" and self.state == "in-call":
+            self._end("Moved the call to Jace Social")    # one of our other devices took the call over
+        elif kind == "renegotiate" and self.state == "in-call":
+            def again():
+                sdp = social.read_call_signal(e["id"])["sdp"]
+                kinds = _stream_kinds(sdp)
+                answer = self._get_engine().reanswer(_strip_tags(sdp))
+                social.call_signal(self.peer, call_id, "reanswer", answer)
+                return kinds
+
+            def done(kinds):
+                if call_id == self.call_id and (self.peer_camera, self.peer_screen) != ("camera" in kinds, "screen" in kinds):
+                    self.peer_camera, self.peer_screen = "camera" in kinds, "screen" in kinds
+                    self.changed.emit()
+            run_task(again, on_done=done, on_error=lambda m: None)
         elif kind == "hangup":
             self._end(f"{self.peer_name} hung up" if self.state == "in-call" else f"{self.peer_name} didn't pick up"
                       if self.state == "calling" else "")
 
     # -- internals
+    def _take_over(self, offer_sdp: str):
+        """The other side moved the call to another device: answer it there instead (new connection)."""
+        peer, call_id = self.peer, self.call_id
+        self.peer_camera = self.peer_screen = False
+
+        def work():
+            kinds = _stream_kinds(offer_sdp)
+            sdp = self._get_engine().make_answer(_strip_tags(offer_sdp), social.ice_servers())
+            social.call_signal(peer, call_id, "answer", sdp)
+            return kinds
+
+        def done(kinds):
+            if call_id == self.call_id:
+                self.peer_camera, self.peer_screen = "camera" in kinds, "screen" in kinds
+                self.changed.emit()
+        run_task(work, on_done=done, on_error=self._failed)
+
     def _get_engine(self) -> voice.Engine:
         if self._engine is None:
             self._engine = voice.Engine(self._engine_state.emit)
@@ -135,7 +183,7 @@ class CallManager(QObject):
             eng = self._engine
             run_task(eng.close, on_error=lambda m: None)
         self.state, self.peer, self.peer_name, self.call_id, self._offer_sdp = "idle", "", "", "", ""
-        self.muted = False
+        self.muted = self.peer_camera = self.peer_screen = False
         self.changed.emit()
         if reason:
             self.error.emit(reason)
@@ -180,3 +228,21 @@ class CallManager(QObject):
             if pcm is None:
                 break
             self._speaker.write(pcm)
+
+
+# Jace Social tags its call descriptions (see server/lib/media.ts): which video is the camera and
+# which the screen share, and whether an offer moves an existing call to another device.
+STREAMS_TAG = "a=x-jace-streams:"
+MOVE_TAG = "a=x-jace-move"
+
+
+def _stream_kinds(sdp: str) -> set[str]:
+    kinds = set()
+    for line in sdp.splitlines():
+        if line.startswith(STREAMS_TAG):
+            kinds |= {part.split("=")[0] for part in line[len(STREAMS_TAG):].split(",") if "=" in part}
+    return kinds
+
+
+def _strip_tags(sdp: str) -> str:
+    return "".join(line for line in sdp.splitlines(keepends=True) if not line.startswith("a=x-jace-"))

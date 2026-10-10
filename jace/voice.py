@@ -53,6 +53,10 @@ class Engine:
     def set_answer(self, answer_sdp: str):
         self._run(self._set_answer(answer_sdp))
 
+    def reanswer(self, offer_sdp: str) -> str:
+        """Answer a new description mid-call (the other side turned their camera or screen on or off)."""
+        return self._run(self._reanswer(offer_sdp))
+
     def close(self):
         try:
             self._run(self._close(), timeout=10)
@@ -116,6 +120,20 @@ class Engine:
 
         if self.pc:
             await self.pc.setRemoteDescription(RTCSessionDescription(sdp, "answer"))
+
+    async def _reanswer(self, offer_sdp):
+        from aiortc import RTCSessionDescription
+
+        pc = self.pc
+        if not pc:
+            raise RuntimeError("Not in a call")
+        await pc.setRemoteDescription(RTCSessionDescription(offer_sdp, "offer"))
+        for t in pc.getTransceivers():
+            # calls here are voice only: say no to their video (and screen audio), so it isn't sent at all
+            if t.kind == "video" or t.sender.track is None:
+                t.direction = "inactive"
+        await pc.setLocalDescription(await pc.createAnswer())
+        return pc.localDescription.sdp
 
     async def _close(self):
         pc, self.pc = self.pc, None

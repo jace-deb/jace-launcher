@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.3.2
+- **Calls with video:** when the friend you're calling turns on their camera or shares their screen, the call bar says so and shows **Watch in Jace Social**. That moves the call to Jace Social in your browser, where you can see it; they don't have to do anything. The Jace Social mod gets the same button (mod 1.4.1).
+- Calls keep working when the other person turns their camera or screen sharing on and off. The launcher stays voice-only and doesn't download their video.
+- Fixes calls with someone who moves the call to another device.
+
 ## 1.3.1
 - **Jace Social mod 1.4 and later:** your friends see the mod's in-game status again. The mod's files are now named `jace_social_…jar`, and the launcher didn't recognise them.
 - **Server add-ons:** LuckPerms is no longer offered on Fabric and Quilt. There it only runs on dedicated servers, so it did nothing in worlds you host. The Jace Social mod's own permissions do that job (Host world → Permissions).

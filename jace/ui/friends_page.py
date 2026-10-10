@@ -226,9 +226,11 @@ class FriendsPage(QWidget):
         self.answer_btn = QPushButton("Answer")
         self.answer_btn.setObjectName("primary")
         self.mute_btn = QPushButton("Mute")
+        self.watch_btn = QPushButton("📷  Watch in Jace Social")
+        self.watch_btn.setToolTip("Video only works in Jace Social: this moves the call there")
         self.hangup_btn = QPushButton("Hang up")
         self.hangup_btn.setObjectName("danger")
-        for w in (self.answer_btn, self.mute_btn, self.hangup_btn):
+        for w in (self.answer_btn, self.watch_btn, self.mute_btn, self.hangup_btn):
             cb.addWidget(w)
         self.call_bar.hide()
         outer.addWidget(self.call_bar)
@@ -269,6 +271,7 @@ class FriendsPage(QWidget):
         self.calls = calls
         self.answer_btn.clicked.connect(calls.answer)
         self.mute_btn.clicked.connect(calls.toggle_mute)
+        self.watch_btn.clicked.connect(calls.watch)
         self.hangup_btn.clicked.connect(lambda: calls.hang_up())
         calls.changed.connect(self._call_changed)
 
@@ -276,11 +279,13 @@ class FriendsPage(QWidget):
         c = self.calls
         name = html.escape(c.peer_name or "a friend")
         text = {"calling": f"📞  Calling <b>{name}</b>…", "ringing": f"📞  <b>{name}</b> is calling you",
-                "in-call": f"🔊  In a call with <b>{name}</b>" + (" (muted)" if c.muted else "")}.get(c.state, "")
+                "in-call": f"🔊  In a call with <b>{name}</b>" + (" (muted)" if c.muted else "")
+                + (" · 📷 camera on" if c.peer_camera else "") + (" · 🖥️ sharing their screen" if c.peer_screen else "")}.get(c.state, "")
         self.call_text.setText(text)
         self.call_bar.setVisible(c.state != "idle")
         self.answer_btn.setVisible(c.state == "ringing")
         self.mute_btn.setVisible(c.state == "in-call")
+        self.watch_btn.setVisible(c.state == "in-call" and (c.peer_camera or c.peer_screen))
         self.mute_btn.setText("Unmute" if c.muted else "Mute")
         self.hangup_btn.setText("Decline" if c.state == "ringing" else "Hang up")
         self.chat.call_btn.setEnabled(c.state == "idle" and self.chat.friend is not None)

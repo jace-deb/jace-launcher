@@ -2,9 +2,10 @@
 
 The launcher listens on 127.0.0.1 (random port) and starts games with
 -Djacelauncher.link=PORT:TOKEN. The mod uses it for voice calls:
-  GET  /call            -> {state, peer, peer_name, muted}
+  GET  /call            -> {state, peer, peer_name, muted, peer_camera, peer_screen}
   POST /call            {uuid, name}  start a call
   POST /call/answer | /call/hangup | /call/mute
+  POST /call/watch      open the call in Jace Social (to see their camera / screen)
 Every request needs the X-Jace-Token header, so other programs can't use it.
 """
 from __future__ import annotations
@@ -92,6 +93,7 @@ class LauncherLink:
                     "/call/answer": c.answer,
                     "/call/hangup": c.hang_up,
                     "/call/mute": c.toggle_mute,
+                    "/call/watch": c.watch,
                 }
                 if self.path not in actions:
                     self._reply(404, {"error": "Not found"})
