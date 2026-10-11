@@ -60,11 +60,14 @@ GitHub Actions builds every platform, because PyInstaller can't build Windows or
 | macOS 12+ (Intel) | `JaceLauncher-<ver>-macos-x86_64.app.zip` | Same as above. |
 | Linux | `JaceLauncher-<ver>-x86_64.AppImage` | Run it; the setup wizard does the rest (see below). |
 
-Every push to `main` builds all of these; download them from the run's **Artifacts**. Pushing a version tag publishes a GitHub Release, then publishes that release to [Jace Store](https://jace-store-deb.vercel.app/project/jace-launcher) as links to the GitHub downloads. Add the release notes to `CHANGELOG.md` first; the store uses them.
+Every push to `main` builds and tests all of these; download them from the run's **Artifacts**.
 
-```bash
-git tag v1.0.0 && git push origin v1.0.0
-```
+**Releasing is automatic:**
+1. Raise `APP_VERSION` in `jace/__init__.py`.
+2. Add a `## <version>` section to `CHANGELOG.md`.
+3. Push to `main`.
+
+If every build and test passes, CI tags `v<version>`, publishes the GitHub Release (with that changelog section as its notes), and lists it on [Jace Store](https://jace-store-deb.vercel.app/project/jace-launcher). Pushes that don't change the version only build and test. Pushing a `v*` tag by hand still works too.
 
 The first launch on every platform asks you to add your accounts. **Settings → Delete Jace Launcher** works on every platform. On Windows you can also uninstall from **Settings → Apps → Installed apps**.
 

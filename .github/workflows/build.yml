@@ -14,6 +14,30 @@ permissions:
   contents: read
 
 jobs:
+  version:
+    # Is this push a new version? (APP_VERSION in jace/__init__.py with no release yet)
+    # Then a green build on main releases it automatically - no tag needed.
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.v.outputs.tag }}
+      publish: ${{ steps.v.outputs.publish }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: v
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          V=$(python3 -c "import re;print(re.search(r'APP_VERSION = \"([^\"]+)\"', open('jace/__init__.py').read()).group(1))")
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            echo "tag=$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"; echo "publish=true" >> "$GITHUB_OUTPUT"
+          elif [[ "$GITHUB_REF" == refs/heads/main && "$GITHUB_EVENT_NAME" == push ]] && ! gh release view "v$V" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "New version v$V: will be released if every build passes"
+            echo "tag=v$V" >> "$GITHUB_OUTPUT"; echo "publish=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "v$V is already released (or this isn't a push to main): build and test only"
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          fi
+
   windows:
     runs-on: windows-latest
     timeout-minutes: 40
@@ -253,8 +277,8 @@ jobs:
           path: dist/*.AppImage
 
   release:
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: [windows, wine, macos, linux]
+    if: needs.version.outputs.publish == 'true'
+    needs: [version, windows, wine, macos, linux]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -263,16 +287,27 @@ jobs:
         with:
           path: artifacts
           merge-multiple: true
+      - uses: actions/checkout@v7
+        with:
+          path: src
+      - name: Release notes from CHANGELOG.md
+        run: |
+          V="${{ needs.version.outputs.tag }}"; V="${V#v}"
+          awk -v v="$V" '$0 == "## "v {f=1; next} /^## / {f=0} f' src/CHANGELOG.md > notes.md
+          cat notes.md
       - uses: softprops/action-gh-release@v3
         with:
+          tag_name: ${{ needs.version.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          name: Jace Launcher ${{ needs.version.outputs.tag }}
+          body_path: notes.md
           files: artifacts/*
-          generate_release_notes: true
 
   store:
     # Publish the new release to Jace Store as links to the GitHub downloads.
     # Needs the JACE_STORE_TOKEN repository secret; skipped if it isn't set.
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: release
+    if: needs.version.outputs.publish == 'true'
+    needs: [version, release]
     runs-on: ubuntu-latest
     env:
       JACE_STORE_TOKEN: ${{ secrets.JACE_STORE_TOKEN }}
@@ -284,4 +319,4 @@ jobs:
             echo "::warning::JACE_STORE_TOKEN secret not set - skipping Jace Store"
             exit 0
           fi
-          python3 packaging/publish_store.py "${{ github.ref_name }}"
+          python3 packaging/publish_store.py "${{ needs.version.outputs.tag }}"
