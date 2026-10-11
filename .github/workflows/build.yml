@@ -232,6 +232,21 @@ jobs:
           APPIMAGE_EXTRACT_AND_RUN: "1"
           JACE_LAUNCHER_HOME: ${{ runner.temp }}/jace-home
         run: ./dist/JaceLauncher-*-x86_64.AppImage --self-test
+      - name: Test adding a Microsoft account in setup (AppImage)
+        env:
+          QT_QPA_PLATFORM: offscreen
+          APPIMAGE_EXTRACT_AND_RUN: "1"
+          JACE_LAUNCHER_HOME: ${{ runner.temp }}/jace-login
+          JACE_SELF_TEST_OUT: ${{ runner.temp }}/login.txt
+        run: |
+          ./dist/JaceLauncher-*-x86_64.AppImage --self-test-login || true
+          cat "$JACE_SELF_TEST_OUT"
+          grep -q "LOGIN-TEST OK" "$JACE_SELF_TEST_OUT"
+          # these must come from the user's system, never the bundle (they have to match its graphics drivers)
+          ./dist/JaceLauncher-*-x86_64.AppImage --appimage-extract >/dev/null
+          if find squashfs-root -name 'libstdc++.so.6' -o -name 'libgbm.so.1' -o -name 'libfontconfig.so.1' | grep -q .; then
+            echo "::error::system libraries got bundled"; exit 1
+          fi
       - uses: actions/upload-artifact@v7
         with:
           name: linux

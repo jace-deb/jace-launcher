@@ -39,6 +39,16 @@ XCBC="$(ldconfig -p | awk '/libxcb-cursor.so.0 /{print $NF; exit}')"
 if [ -z "$XCBC" ] && [ -e .venv/syslibs/libxcb-cursor.so.0 ]; then XCBC=.venv/syslibs/libxcb-cursor.so.0; fi
 if [ -n "$XCBC" ]; then cp -L "$XCBC" "$QTLIB/libxcb-cursor.so.0"; else echo "warning: libxcb-cursor0 not bundled"; fi
 
+# Don't ship system libraries that must match the user's graphics drivers or system config.
+# PyInstaller copies them from the build machine (Ubuntu 22.04), but the user's Mesa / EGL
+# drivers need the system's own (newer) libstdc++, so a bundled old one made graphics fail
+# ("CXXABI_1.3.15 not found", "EGL not available") and the Microsoft sign-in web view abort.
+# Every distro this AppImage runs on (glibc >= 2.35) has these, at least as new.
+for lib in libstdc++.so.6 libgcc_s.so.1 libgbm.so.1 libfontconfig.so.1 libfreetype.so.6 libexpat.so.1 \
+           libglib-2.0.so.0 libgio-2.0.so.0 libgobject-2.0.so.0 libgmodule-2.0.so.0 libdbus-1.so.3; do
+  find "$BUILD/dist/jace-launcher" -name "$lib" -delete
+done
+
 echo "==> AppDir"
 mkdir -p "$APPDIR/usr/bin" "$APPDIR/usr/share/applications" "$APPDIR/usr/share/metainfo" \
          "$APPDIR/usr/share/icons/hicolor/256x256/apps"

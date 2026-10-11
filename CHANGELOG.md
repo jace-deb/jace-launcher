@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.4.4
+- **Linux:** fixed a crash when clicking **Add Microsoft account**, in setup and in the launcher. This happened on newer distros (Arch, CachyOS, Fedora…), especially on Wayland. The AppImage shipped an older copy of some system libraries, which broke the graphics drivers, and the Microsoft sign-in page couldn't start. It now uses your system's own, so hardware graphics work again too.
+
 ## 1.4.3
 - **Windows setup no longer closes when you add a Microsoft account.** When the Microsoft sign-in page started loading, Windows rebuilt the setup window to draw the page, which hid setup and ended it. The sign-in window is now a separate window, so setup stays open.
 - `crash.log` also records how setup ended and why the app quit.
