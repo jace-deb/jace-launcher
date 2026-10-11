@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.4.5
+- **Linux:** Jace Launcher shows up only once in your app menu. AppImageLauncher used to add a second "Jace Launcher (1)" entry. The AppImage now tells it not to, and Jace Launcher removes any such duplicate when it starts.
+
 ## 1.4.4
 - **Linux:** fixed a crash when clicking **Add Microsoft account**, in setup and in the launcher. This happened on newer distros (Arch, CachyOS, Fedora…), especially on Wayland. The AppImage shipped an older copy of some system libraries, which broke the graphics drivers, and the Microsoft sign-in page couldn't start. It now uses your system's own, so hardware graphics work again too.
 

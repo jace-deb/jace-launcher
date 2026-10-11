@@ -721,6 +721,11 @@ def main():
             return
         if not wiz.launch_after():
             return
+    if desktop.running_installed_copy() and desktop.running_appimage():
+        try:
+            desktop.remove_duplicate_entries()
+        except OSError:
+            pass
     if "--launch" in argv and quick_launch(argv):
         return
     if not settings.get("welcomed"):

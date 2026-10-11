@@ -175,6 +175,33 @@ def _refresh_menus():
             subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
 
 
+def remove_duplicate_entries(appimage: Path | None = None) -> int:
+    """Remove menu entries other tools made for our AppImage (AppImageLauncher writes
+    appimagekit_<hash>-Jace_Launcher.desktop, which showed up as a second "Jace Launcher (1)"
+    next to ours). Returns how many were removed."""
+    paths = {str(p) for p in (appimage, installed_path(), running_appimage()) if p}
+    apps = DATA_HOME / "applications"
+    removed = 0
+    for f in apps.glob("appimagekit_*.desktop") if apps.is_dir() else []:
+        try:
+            text = f.read_text(errors="replace")
+        except OSError:
+            continue
+        exec_line = next((ln for ln in text.splitlines() if ln.startswith(("Exec=", "TryExec="))), "")
+        if not any(p in exec_line for p in paths) and APP_ID not in text:
+            continue
+        ident = next((ln.split("=", 1)[1].strip() for ln in text.splitlines()
+                      if ln.startswith("X-AppImage-Identifier=")), "")
+        f.unlink(missing_ok=True)
+        if ident:                               # its copy of our icon
+            for icon in (DATA_HOME / "icons").rglob(f"appimagekit_{ident}_*"):
+                icon.unlink(missing_ok=True)
+        removed += 1
+    if removed:
+        _refresh_menus()
+    return removed
+
+
 def _write(path: Path, text: str, executable=False):
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text)
@@ -233,6 +260,7 @@ def install(target_dir: Path = DEFAULT_DIR, menu=True, desktop=True, terminal=Tr
         _write(METAINFO_FILE, _metainfo())
         done.append("appstream")
 
+    remove_duplicate_entries(exe)
     _refresh_menus()
     write_json(RECORD, {"path": str(exe), "version": APP_VERSION, "parts": done})
     status("Done")
@@ -247,6 +275,7 @@ def uninstall(remove_data=False, delete_running=False):
     for p in (MENU_FILE, desktop_shortcut(), ICON_FILE, BIN_LINK, METAINFO_FILE, exe, running):
         if p and (p.is_symlink() or p.exists()):
             p.unlink()
+    remove_duplicate_entries(exe)
     RECORD.unlink(missing_ok=True)
     if remove_data:
         shutil.rmtree(DATA_DIR, ignore_errors=True)

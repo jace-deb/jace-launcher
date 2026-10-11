@@ -68,6 +68,7 @@ Icon=$APP_ID
 Terminal=false
 Categories=Game;
 Keywords=minecraft;launcher;mods;fabric;forge;neoforge;quilt;modrinth;curseforge;skins;
+X-AppImage-Integrate=false
 DESKTOP
 cp "$APPDIR/$APP_ID.desktop" "$APPDIR/usr/share/applications/"
 PYTHONPATH="$ROOT" .venv/bin/python -c "from jace.desktop import _metainfo; print(_metainfo(), end='')" \
