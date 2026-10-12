@@ -44,6 +44,8 @@ class Instance:
     @property
     def game_dir(self) -> Path: return self.folder / "minecraft"
     @property
+    def is_bedrock(self) -> bool: return self.loader == "bedrock"
+    @property
     def icon_path(self) -> Path: return self.folder / "icon.png"
 
     def window_size(self) -> tuple[int, int]:
@@ -59,6 +61,8 @@ class Instance:
         return d
 
     def describe(self) -> str:
+        if self.is_bedrock:
+            return f"Bedrock {self.mc_version}"
         if self.loader == "vanilla":
             return f"Vanilla {self.mc_version}"
         return f"{LOADERS[self.loader].name} {self.loader_version} · {self.mc_version}"
@@ -68,6 +72,15 @@ class Instance:
 
     # -- install & launch --
     def install(self, callback: dict, force=False):
+        if self.is_bedrock:
+            from jace import bedrock
+            if not bedrock.installed():
+                bedrock.install(callback.get("setStatus", print))
+            if not bedrock.version_dir(self.mc_version):
+                raise bedrock.BedrockError(
+                    f"Bedrock {self.mc_version} isn't downloaded. Open the instance's Settings → "
+                    "Download versions (it opens the Minecraft Bedrock Launcher), download it, then press Play.")
+            return
         if self.data.get("version_id") and not force:
             # still verify/repair the base version quickly (only downloads missing files)
             mll.install.install_minecraft_version(self.data["version_id"], str(GAME_ROOT), callback=callback)
@@ -88,6 +101,10 @@ class Instance:
         return False
 
     def build_command(self, account: dict, server: str | None = None) -> list[str]:
+        if self.is_bedrock:
+            from jace import bedrock
+            w, h = (int(self.data.get("window_width") or 0), int(self.data.get("window_height") or 0))
+            return bedrock.client_command(self.mc_version, self.game_dir, w, h)
         vid = self.data["version_id"]
         mem = int(self.data.get("memory_mb") or settings.get("memory_mb"))
         jvm = [f"-Xmx{mem}M", f"-Xms{min(int(settings.get('min_memory_mb')), mem)}M"]
@@ -128,6 +145,9 @@ class Instance:
         self.data["last_played"] = time.time()
         self.save()
         kwargs = {}
+        if self.is_bedrock:
+            from jace.bedrock import _clean_env
+            kwargs["env"] = _clean_env()      # our AppImage's library paths would break flatpak/mcpelauncher
         if sys.platform == "win32":
             kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
         if detached:
@@ -173,7 +193,7 @@ def create_instance(name: str, mc_version: str, loader: str = "vanilla", loader_
                  "loader_version": loader_version, "created": time.time(), **(extra or {})}
     inst.save()
     inst.game_dir.mkdir(parents=True, exist_ok=True)
-    if "modpack" not in inst.data:   # a modpack's own resource packs shouldn't spill into other instances
+    if "modpack" not in inst.data and loader != "bedrock":   # (modpacks keep their own packs; Bedrock has its own folders)
         from jace import sync
         sync.apply_defaults(inst)
     return inst

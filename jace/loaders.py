@@ -141,6 +141,23 @@ class ForgeLike:
         return vid
 
 
+class BedrockLoader:
+    """Minecraft: Bedrock Edition, through the Minecraft Bedrock Launcher (Linux / macOS).
+    Its "game versions" are the ones downloaded in mcpelauncher's window."""
+    id, name = "bedrock", "Bedrock"
+    needs_loader_version = False
+
+    def game_versions(self, include_unstable=True):
+        from jace import bedrock
+        return [v["name"] for v in bedrock.installed_versions()]
+
+    def loader_versions(self, mc):
+        return []
+
+    def install(self, mc, loader_version, callback):
+        return ""
+
+
 LOADERS = {
     "vanilla": Vanilla(),
     "fabric": FabricLike("fabric", "Fabric", "https://meta.fabricmc.net/v2"),
@@ -149,6 +166,8 @@ LOADERS = {
     "neoforge": ForgeLike("neoforge", "NeoForge"),
     "legacyfabric": FabricLike("legacyfabric", "Legacy Fabric", "https://meta.legacyfabric.net/v2"),
 }
+if sys.platform != "win32":         # Windows has the real Bedrock (Microsoft Store), not mcpelauncher
+    LOADERS["bedrock"] = BedrockLoader()
 
 # Names used by Modrinth / CurseForge for each loader
 MODRINTH_LOADER = {"fabric": "fabric", "quilt": "quilt", "forge": "forge",

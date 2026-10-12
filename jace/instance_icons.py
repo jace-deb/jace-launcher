@@ -3,7 +3,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QFont, QImage, QPainter
 
 LOADER_COLORS = {"vanilla": "#5b8c3a", "fabric": "#c6a875", "quilt": "#9c5bd6", "forge": "#df7a3a",
-                 "neoforge": "#e0a046", "legacyfabric": "#4f8fd6"}
+                 "neoforge": "#e0a046", "legacyfabric": "#4f8fd6", "bedrock": "#3a8c8c"}
 
 
 def icon_image(inst, size=256) -> QImage:

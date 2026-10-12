@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.6.0
+- **Bedrock instances:** Minecraft Bedrock now works like a normal instance, and the separate Bedrock tab is gone.
+  - **Library → New instance → Mod loader: Bedrock**, then pick a Bedrock version. **Play** starts that version.
+  - Each Bedrock instance has its own worlds and packs, a **Worlds** and a **Packs** tab, its own window size, icon and shortcut.
+  - You don't need a Microsoft account. Bedrock uses the Google Play account in the Minecraft Bedrock Launcher.
+  - **Download versions…** (in New instance and in the instance's Settings) opens the Minecraft Bedrock Launcher: sign in to Google Play and download versions there. If it isn't installed, **Install Bedrock launcher** installs it.
+- **Change version:** every instance's **Settings** has a version picker now, for Java (with the matching loader version) and Bedrock. Java game files download on the next Play.
+- **Browse:** with a Bedrock instance under **Install into**, Browse shows Jace Store's Minecraft Bedrock section (add-ons, texture packs, worlds, skin packs, world templates) and installs into that instance.
+
 ## 1.5.0
 - **Minecraft Bedrock** (new 🟩 Bedrock page):
   - **Linux and macOS:** one click installs the [Minecraft Bedrock Launcher](https://minecraft-linux.github.io): from Flathub on Linux, the Mac app on macOS. **Play Bedrock** starts it, and **Update** keeps it current. It runs the Android version of Bedrock, so you need to own Minecraft on Google Play. You sign in with Google in its own window; Jace Launcher never sees your Google account.

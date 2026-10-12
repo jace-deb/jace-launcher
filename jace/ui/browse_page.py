@@ -108,6 +108,11 @@ class ResultCard(QFrame):
         self.btn.style().polish(self.btn)
 
 
+# Jace Store's Minecraft Bedrock section (shown when a Bedrock instance is selected)
+BEDROCK_KINDS = {"bedrock_addon": "Add-Ons", "bedrock_texture": "Texture Packs", "bedrock_world": "Worlds",
+                 "bedrock_skin": "Skin Packs", "bedrock_template": "World Templates"}
+
+
 class BrowsePage(QWidget):
     instance_created = Signal(object)
 
@@ -172,10 +177,12 @@ class BrowsePage(QWidget):
         self._timer = QTimer(self, singleShot=True, interval=350)
         self._timer.timeout.connect(self.do_search)
         self.search.textChanged.connect(lambda: self._timer.start())
+        self.target.currentIndexChanged.connect(lambda *_: self._sync_mode())
         for w in (self.source, self.kind, self.sort, self.target):
             w.currentIndexChanged.connect(lambda *_: self.do_search())
         self.filter.toggled.connect(lambda *_: self.do_search())
         self.kind.currentIndexChanged.connect(self._kind_changed)
+        self._bedrock = False
         self.refresh_instances()
 
     # --- instance targets
@@ -189,6 +196,27 @@ class BrowsePage(QWidget):
         if idx >= 0:
             self.target.setCurrentIndex(idx)
         self.target.blockSignals(False)
+        self._sync_mode()
+
+    def _sync_mode(self):
+        """Java instance: the usual sources and types. Bedrock instance: Jace Store's Bedrock section."""
+        inst = self.target_instance()
+        bedrock = bool(inst and inst.is_bedrock)
+        if bedrock == self._bedrock:
+            return
+        self._bedrock = bedrock
+        for combo in (self.kind, self.source):
+            combo.blockSignals(True)
+        self.kind.clear()
+        for k, label in (BEDROCK_KINDS if bedrock else PROJECT_TYPES).items():
+            self.kind.addItem(label, k)
+        if bedrock:
+            self.source.setCurrentIndex(max(0, self.source.findData("jacestore")))
+        self.source.setEnabled(not bedrock)
+        self.filter.setVisible(not bedrock)
+        for combo in (self.kind, self.source):
+            combo.blockSignals(False)
+        self._kind_changed()
 
     def target_instance(self):
         iid = self.target.currentData()
@@ -196,6 +224,7 @@ class BrowsePage(QWidget):
 
     def open_for(self, inst, kind):
         self.refresh_instances(inst.id)
+        self._sync_mode()
         idx = self.kind.findData(kind)
         if idx >= 0:
             self.kind.setCurrentIndex(idx)
@@ -207,7 +236,7 @@ class BrowsePage(QWidget):
         inst = self.target_instance()
         self._installed_gen += 1
         gen = self._installed_gen
-        if kind == "modpack" or not inst:          # modpacks always show Install
+        if kind == "modpack" or not inst or kind.startswith("bedrock_"):   # (modpacks/Bedrock: always Install)
             self.installed = {}
             self._apply_installed()
             return
@@ -244,8 +273,9 @@ class BrowsePage(QWidget):
 
     def _kind_changed(self):
         is_pack = self.kind.currentData() == "modpack"
-        for w in (self.target_label, self.target, self.filter):
+        for w in (self.target_label, self.target):
             w.setVisible(not is_pack)
+        self.filter.setVisible(not is_pack and not self._bedrock)
 
     def showEvent(self, e):
         super().showEvent(e)
@@ -254,8 +284,8 @@ class BrowsePage(QWidget):
 
     # --- searching
     def do_search(self, append=False):
-        src = SOURCES[self.source.currentData()]
-        kind = self.kind.currentData()
+        kind = self.kind.currentData() or ""
+        src = SOURCES["jacestore" if kind.startswith("bedrock_") else self.source.currentData()]
         if not src.available():
             self.results.clear()
             self.more.hide()
@@ -268,7 +298,7 @@ class BrowsePage(QWidget):
             self.refresh_installed()
         gv = loader = None
         inst = self.target_instance()
-        if kind != "modpack" and inst and self.filter.isChecked():
+        if kind != "modpack" and not kind.startswith("bedrock_") and inst and self.filter.isChecked():
             gv = inst.mc_version
             loader = inst.loader if kind == "mod" else None
         self.query_id += 1
@@ -301,7 +331,10 @@ class BrowsePage(QWidget):
         def fail(msg):
             if qid == self.query_id:
                 self.count.setText("")
-                self._notice(f"Search failed: {msg}")
+                if kind.startswith("bedrock_") and "400" in msg:
+                    self._notice("Jace Store's Minecraft Bedrock section isn't open yet - check back soon.")
+                else:
+                    self._notice(f"Search failed: {msg}")
         run_task(src.search, self.search.text().strip(), kind, gv, loader, self.sort.currentText(),
                  self.offset, PAGE_SIZE, on_done=done, on_error=fail)
 
@@ -319,6 +352,9 @@ class BrowsePage(QWidget):
 
     # --- installing
     def install(self, p: dict):
+        if p["project_type"] in BEDROCK_KINDS or (self.kind.currentData() or "").startswith("bedrock_"):
+            self._install_bedrock(p)
+            return
         kind = p["project_type"] if p["project_type"] in PROJECT_TYPES else self.kind.currentData()
         src = SOURCES[p["source"]]
         inst = None if kind == "modpack" else self.target_instance()
@@ -374,3 +410,29 @@ class BrowsePage(QWidget):
         self.runner.notify(f"Loading versions of {p['title']}…")
         run_task(src.versions, p["id"], gv, loader, kind, on_done=got_versions,
                  on_error=lambda m: show_error(self, m))
+
+    def _install_bedrock(self, p: dict):
+        """Bedrock content from Jace Store: pick a version, download it, import it into the instance."""
+        from jace import bedrock
+        inst = self.target_instance()
+        if not inst or not inst.is_bedrock:
+            show_error(self, "Pick a Bedrock instance under Install into (Library → New instance → Bedrock).")
+            return
+
+        def got_versions(vs):
+            if not vs:
+                show_error(self, f"{p['title']} has no files to download yet.", "Not available")
+                return
+            dlg = VersionPicker(p["title"], vs, self)
+            dlg.deps_note.hide()
+            if dlg.exec() != QDialog.DialogCode.Accepted or not dlg.selected():
+                return
+            v = dlg.selected()
+            self.runner.run_job(
+                lambda callback: bedrock.install_version(v, inst.game_dir, callback["setStatus"]),
+                f"Installing {p['title']}",
+                lambda added: self.runner.notify(f"Added to {inst.name}: {', '.join(added)}"), True)
+
+        self.runner.notify(f"Loading versions of {p['title']}…")
+        run_task(SOURCES["jacestore"].versions, p["id"], None, None, p["project_type"],
+                 on_done=got_versions, on_error=lambda m: show_error(self, m))

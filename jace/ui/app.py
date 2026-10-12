@@ -19,7 +19,6 @@ from jace.ui.browse_page import BrowsePage
 from jace.ui.common import STYLE, run_task, show_error
 from jace.ui.friends_page import FriendsPage
 from jace.ui.social_live import SocialLive
-from jace.ui.bedrock_page import BedrockPage
 from jace.ui import launcher_link
 from jace.ui.calls import CallManager, Media, RoomManager
 from jace.instance_icons import icon_image
@@ -104,12 +103,10 @@ class MainWindow(QMainWindow):
         self.skins = SkinsPage(self)
         self.accounts_page = AccountsPage()
         self.friends_page = FriendsPage()
-        self.bedrock_page = BedrockPage()
         self.settings_page = SettingsPage()
         for i, (label, page) in enumerate((("🎮  Library", self.library), ("🧩  Browse", self.browse),
                                            ("👕  Skins && Capes", self.skins), ("👤  Accounts", self.accounts_page),
                                            ("👥  Friends", self.friends_page),
-                                           ("🟩  Bedrock", self.bedrock_page),
                                            ("⚙  Settings", self.settings_page))):
             b = QPushButton(label)
             b.setObjectName("nav")
@@ -411,15 +408,15 @@ class MainWindow(QMainWindow):
         if inst is None or self.busy:
             return
         acc = accounts.current()
-        if not acc:
+        if not acc and not inst.is_bedrock:     # Bedrock signs in with Google Play inside its own launcher
             QMessageBox.information(self, "No account", "Add a Microsoft or offline account first.")
             self.go(3)
             return
 
         def prepare(callback):
-            account = accounts.ensure_fresh(acc)
+            account = accounts.ensure_fresh(acc) if acc and not inst.is_bedrock else (acc or {})
             inst.install(callback)
-            callback["setStatus"]("Starting Minecraft…")
+            callback["setStatus"]("Starting Minecraft Bedrock…" if inst.is_bedrock else "Starting Minecraft…")
             return inst.launch(account, server)
 
         def started(proc):
@@ -592,7 +589,7 @@ def quick_launch(argv) -> bool:
         show_error(None, f"This shortcut's instance ({iid}) no longer exists.", "Instance not found")
         return True
     acc = accounts.current()
-    if not acc:
+    if not acc and not inst.is_bedrock:
         QMessageBox.information(None, "Add an account", "Add a Microsoft or offline account first, then try the "
                                 "shortcut again.")
         return False
@@ -606,7 +603,7 @@ def quick_launch(argv) -> bool:
     lay.addWidget(icon)
     col = QVBoxLayout()
     col.addWidget(QLabel(f"<b style='font-size:15px'>{inst.name}</b><br>"
-                         f"<span style='color:#8b919c'>{inst.describe()} · {acc['username']}</span>"))
+                         f"<span style='color:#8b919c'>{inst.describe()}{' · ' + acc['username'] if acc else ''}</span>"))
     status = QLabel("Getting ready…")
     status.setObjectName("muted")
     bar = QProgressBar()
@@ -616,7 +613,7 @@ def quick_launch(argv) -> bool:
     lay.addLayout(col, 1)
 
     def prepare(callback):
-        account = accounts.ensure_fresh(acc)
+        account = accounts.ensure_fresh(acc) if acc and not inst.is_bedrock else (acc or {})
         inst.install(callback)
         callback["setStatus"]("Starting Minecraft…")
         proc = inst.launch(account, detached=True)

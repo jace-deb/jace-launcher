@@ -11,7 +11,7 @@ A desktop launcher for Minecraft: Java Edition, written in Python and Qt (PySide
 - **Java is handled for you**: each version gets the Java runtime Mojang ships for it (Java 8, 16, 17 or 21). You can also point it at your own Java.
 - **Instances**: every instance has its own folder for mods, saves, resource packs and shaders. Versions, libraries and assets are downloaded once and shared between instances.
 - **Instance shortcuts**: right-click an instance and choose **Create shortcut**, or use the instance's Settings. You get a desktop and Start menu / Launchpad / applications-menu shortcut that starts that instance straight away, with no launcher window.
-- **Per-instance settings**: window size, memory, Java and JVM arguments.
+- **Per-instance settings**: Minecraft version, window size, memory, Java and JVM arguments.
 - **Synced folders**: share worlds, resource packs, shaders, screenshots and schematics between instances (each instance's **Sync** tab). New instances sync resource packs, shaders and screenshots by default. Under **Settings → Synced folders** you can move the shared folder into Dropbox, OneDrive or Google Drive to sync between computers. Uses folder links on Linux and macOS, and junctions on Windows (no admin rights needed).
 - **Instance icons**: choose any image, or design one in the **Icon builder** (shape, colors and gradients, text, symbols, or any Minecraft block or item texture). Modpacks use their own icon automatically.
 - **Modrinth**: search and install mods, modpacks, resource packs and shaders. Results are filtered to the selected instance's version and loader, and required dependencies are installed automatically.
@@ -32,10 +32,11 @@ A desktop launcher for Minecraft: Java Edition, written in Python and Qt (PySide
 - **Friends list**: add friends by Minecraft username and see their skin. Save the server they play on to see if they're online there, and click **Join** to launch straight into it. There's no Jace Launcher server, so "online" only works on servers that share their player list.
 - **Voice calls**: call a friend from their chat. In game, the Jace Social mod controls the call through the launcher. That only works when the game was started from Jace Launcher.
 - **Server add-ons**: one-click LuckPerms, WorldEdit, Chunky, spark and Ledger (an instance's **Mods** tab) for worlds you host with the Jace Social mod.
-- **Minecraft Bedrock** (🟩 Bedrock page):
-  - **Linux and macOS:** installs and starts the [Minecraft Bedrock Launcher](https://minecraft-linux.github.io), which needs Minecraft owned on Google Play.
-  - **Windows:** opens Bedrock from the Microsoft Store.
-  - Manages Bedrock worlds and packs, imports `.mcpack`, `.mcaddon`, `.mcworld` and `.mctemplate` files, and installs Bedrock content from Jace Store.
+- **Minecraft Bedrock instances** (Linux and macOS): pick **Bedrock** as the loader in New instance.
+  - They run through the [Minecraft Bedrock Launcher](https://minecraft-linux.github.io), which needs Minecraft owned on Google Play. It downloads the versions; Jace Launcher installs it for you.
+  - Each instance has its own worlds and packs, and a version you can change.
+  - Imports `.mcpack`, `.mcaddon`, `.mcworld` and `.mctemplate` files.
+  - **Browse** shows Jace Store's Bedrock section for Bedrock instances.
 - **Game log** window, plus per-instance memory, Java and JVM argument overrides.
 
 ## Running

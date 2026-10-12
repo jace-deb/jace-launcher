@@ -1,10 +1,11 @@
-"""Minecraft: Bedrock Edition.
+"""Minecraft: Bedrock Edition instances.
 
 Linux and macOS run Bedrock through the Minecraft Bedrock Launcher (mcpelauncher,
 https://minecraft-linux.github.io). It runs the Android version of Bedrock, which you
-need to own on Google Play; mcpelauncher's own window handles the Google sign-in and
-game downloads. Jace Launcher installs it, starts it, and manages worlds and packs
-(including Jace Store's Bedrock section).
+need to own on Google Play. mcpelauncher's own window does the Google sign-in and
+downloads game versions (we never touch the Google account); Jace Launcher installs
+mcpelauncher, then starts a chosen downloaded version itself with mcpelauncher-client,
+giving every Bedrock instance its own data folder (worlds, packs) like a Java instance.
 
   Linux  -> Flatpak io.mrarm.mcpelauncher from Flathub (the up-to-date build), or a
             system-wide mcpelauncher-ui-qt if one is installed
@@ -81,7 +82,7 @@ def installed() -> str | None:
 
 
 def data_dir() -> Path:
-    """mcpelauncher's data folder (PathHelper::getPrimaryDataDirectory in mcpelauncher)."""
+    """mcpelauncher's shared data folder (its default; Jace instances use their own)."""
     if IS_MAC:
         return HOME / "Library" / "Application Support" / "mcpelauncher"
     if installed() == "flatpak" or not native_launcher():
@@ -89,8 +90,67 @@ def data_dir() -> Path:
     return Path(os.environ.get("XDG_DATA_HOME") or HOME / ".local" / "share") / "mcpelauncher"
 
 
-def com_mojang() -> Path:
-    """Bedrock's com.mojang folder (worlds, packs)."""
+def versions_dir() -> Path:
+    """Where mcpelauncher's window keeps downloaded game versions (QStandardPaths GenericDataLocation)."""
+    return data_dir() / "versions"
+
+
+def _version_key(name: str):
+    return tuple(int(x) for x in re.findall(r"\d+", name)[:4]) or (0,)
+
+
+def installed_versions() -> list[dict]:
+    """Bedrock versions downloaded in mcpelauncher, newest first: [{name, dir}]."""
+    vdir = versions_dir()
+    found = {}
+    ini = vdir / "versions.ini"
+    if ini.is_file():
+        group = None
+        for line in ini.read_text(errors="replace").splitlines():
+            line = line.strip()
+            if line.startswith("[") and line.endswith("]"):
+                group = line[1:-1]
+            elif group and line.startswith("versionName="):
+                found[group] = line.split("=", 1)[1].strip()
+    out = []
+    for d in sorted(vdir.iterdir()) if vdir.is_dir() else []:
+        if d.is_dir() and any(d.glob("lib/*/libminecraftpe.so")):
+            out.append({"name": found.get(d.name) or d.name, "dir": str(d)})
+    return sorted(out, key=lambda v: _version_key(v["name"]), reverse=True)
+
+
+def version_dir(name: str) -> Path | None:
+    return next((Path(v["dir"]) for v in installed_versions() if v["name"] == name), None)
+
+
+def client_command(version: str, data: Path, width: int = 0, height: int = 0) -> list[str]:
+    """Command that starts Bedrock <version> with <data> as its data folder."""
+    vdir = version_dir(version)
+    if not vdir:
+        raise BedrockError(f"Bedrock {version} isn't downloaded. Click \"Download versions\" (it opens the "
+                           f"Minecraft Bedrock Launcher) and download it there, then press Play again.")
+    args = ["-dg", str(vdir), "-dd", str(data)]
+    if width > 0 and height > 0:
+        args += ["-ww", str(width), "-wh", str(height)]
+    kind = installed()
+    if kind == "flatpak":
+        # the sandbox can't see our files: share just this instance's folder with it
+        return ["flatpak", "run", f"--filesystem={data}", "--command=mcpelauncher-client", FLATPAK_ID, *args]
+    if kind == "native":
+        client = shutil.which("mcpelauncher-client")
+        if client:
+            return [client, *args]
+    if kind == "mac":
+        client = next((p for p in mac_app().rglob("mcpelauncher-client") if p.is_file()), None)
+        if client:
+            return [str(client), *args]
+    raise BedrockError("Install the Minecraft Bedrock Launcher first")
+
+
+def com_mojang(root: Path | None = None) -> Path:
+    """Bedrock's com.mojang folder (worlds, packs) inside a data folder (an instance's)."""
+    if root is not None:
+        return Path(root) / "games" / "com.mojang"
     if IS_WIN:
         appdata = Path(os.environ.get("APPDATA", HOME / "AppData" / "Roaming"))
         gdk = appdata / "Minecraft Bedrock" / "Users" / "Shared" / "games" / "com.mojang"
@@ -174,8 +234,8 @@ def update(status=print):
     status("Up to date")
 
 
-def play():
-    """Open the Bedrock launcher (or Bedrock itself on Windows)."""
+def open_launcher():
+    """Open mcpelauncher's window: Google Play sign-in and downloading versions (or Bedrock on Windows)."""
     kind = installed()
     opts = dict(stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     if kind == "windows":
@@ -212,9 +272,9 @@ def _pack_name(folder: Path) -> str:
         return folder.name
 
 
-def list_content() -> dict[str, list[dict]]:
+def list_content(data: Path | None = None) -> dict[str, list[dict]]:
     """{"world": [...], "resource": [...], ...}; each item {name, path}."""
-    root = com_mojang()
+    root = com_mojang(data)
     out = {}
     for kind, sub in FOLDERS.items():
         items = []
@@ -231,9 +291,9 @@ def list_content() -> dict[str, list[dict]]:
     return out
 
 
-def remove(path: str):
+def remove(path: str, data: Path | None = None):
     p = Path(path).resolve()
-    root = com_mojang().resolve()
+    root = com_mojang(data).resolve()
     if root not in p.parents:
         raise BedrockError("That isn't in Minecraft Bedrock's folder")
     shutil.rmtree(p)
@@ -281,9 +341,8 @@ def _extract_into(zf: zipfile.ZipFile, prefix: str, dest: Path):
             shutil.copyfileobj(src, out)
 
 
-def _import_zip(zf: zipfile.ZipFile, hint: str, done: list[str]):
+def _import_zip(zf: zipfile.ZipFile, hint: str, done: list[str], root: Path):
     names = zf.namelist()
-    root = com_mojang()
     # nested packs (.mcaddon = several .mcpack files)
     for n in names:
         if n.lower().endswith((".mcpack", ".mcworld", ".mctemplate")) and not n.endswith("/"):
@@ -291,7 +350,7 @@ def _import_zip(zf: zipfile.ZipFile, hint: str, done: list[str]):
                 shutil.copyfileobj(f, tmp)
                 tmp.seek(0)
                 with zipfile.ZipFile(tmp) as inner:
-                    _import_zip(inner, Path(n).name, done)
+                    _import_zip(inner, Path(n).name, done, root)
     # worlds: a level.dat (at the top or in one folder)
     worlds = [n[:-len("level.dat")] for n in names if n.endswith("level.dat") and n.count("/") <= 1]
     manifests = [n[:-len("manifest.json")] for n in names
@@ -328,10 +387,11 @@ def _import_zip(zf: zipfile.ZipFile, hint: str, done: list[str]):
         done.append(f"{kind.title()} pack: {name}")
 
 
-def import_file(path: str | Path) -> list[str]:
-    """Import a .mcpack / .mcaddon / .mcworld / .mctemplate (or a zip of one). Returns what was added."""
+def import_file(path: str | Path, data: Path | None = None) -> list[str]:
+    """Import a .mcpack / .mcaddon / .mcworld / .mctemplate (or a zip of one) into a data
+    folder (an instance's). Returns what was added."""
     path = Path(path)
-    if IS_WIN:
+    if IS_WIN and data is None:
         os.startfile(str(path))                 # noqa: S606 - Minecraft imports it itself
         return [f"Opened {path.name} with Minecraft"]
     try:
@@ -340,21 +400,19 @@ def import_file(path: str | Path) -> list[str]:
         raise BedrockError(f"{path.name} isn't a Bedrock pack or world") from e
     done: list[str] = []
     with zf:
-        _import_zip(zf, path.name, done)
+        _import_zip(zf, path.name, done, com_mojang(data))
     if not done:
         raise BedrockError(f"{path.name} has no Bedrock pack or world in it")
     return done
 
 
-def install_from_store(slug: str, status=print) -> list[str]:
-    """Download a Jace Store Bedrock project's file and import it."""
-    from jace.content import JaceStore
-    r = get_json(f"{JaceStore.API}/project/{slug}/resolve")
-    f = r.get("file")
+def install_version(version: dict, data: Path, status=print) -> list[str]:
+    """Download a Jace Store Bedrock version (as returned by content.JaceStore) and import it."""
+    f = version.get("file")
     if not f:
-        raise BedrockError("That project has no file to download")
+        raise BedrockError("That version has no file to download")
     with tempfile.TemporaryDirectory() as tmp:
         dest = Path(tmp) / Path(f["filename"]).name
         status(f"Downloading {f['filename']}…")
-        download(f["url"], dest, sha1=(f.get("hashes") or {}).get("sha1"))
-        return import_file(dest)
+        download(f["url"], dest, sha1=f.get("sha1"))
+        return import_file(dest, data)

@@ -54,7 +54,25 @@ class NewInstanceDialog(QDialog):
         f.addRow("Loader version", self.loader_version)
         self.info = QLabel("")
         self.info.setObjectName("muted")
+        self.info.setWordWrap(True)
         f.addRow(self.info)
+        # Bedrock: get the Minecraft Bedrock Launcher / download versions in its window
+        brow = QHBoxLayout()
+        self.br_install = QPushButton("Install Bedrock launcher")
+        self.br_install.setObjectName("primary")
+        self.br_install.clicked.connect(self._install_bedrock)
+        self.br_download = QPushButton("Download versions…")
+        self.br_download.setToolTip("Opens the Minecraft Bedrock Launcher: sign in to Google Play there and "
+                                    "download Bedrock versions, then come back")
+        self.br_download.clicked.connect(self._open_bedrock_launcher)
+        self.br_refresh = QPushButton("Refresh")
+        self.br_refresh.clicked.connect(self._load_versions)
+        for b in (self.br_install, self.br_download, self.br_refresh):
+            brow.addWidget(b)
+        brow.addStretch()
+        self.br_row = QWidget()
+        self.br_row.setLayout(brow)
+        f.addRow(self.br_row)
         self.buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
         self.buttons.button(QDialogButtonBox.StandardButton.Ok).setText("Create")
         self.buttons.button(QDialogButtonBox.StandardButton.Ok).setObjectName("primary")
@@ -71,8 +89,64 @@ class NewInstanceDialog(QDialog):
     def _lid(self):
         return self.loader.currentData()
 
+    def _bedrock_mode(self, on: bool):
+        self.br_row.setVisible(on)
+        for w in (self.snapshots, self.old):
+            w.setVisible(not on)
+        self.loader_version.setVisible(not on)
+
+    def _install_bedrock(self):
+        from jace import bedrock
+        self.br_install.setEnabled(False)
+
+        def done(_):
+            self.br_install.setEnabled(True)
+            self._load_versions()
+
+        def fail(m):
+            self.br_install.setEnabled(True)
+            show_error(self, m)
+        run_task(bedrock.install, on_done=done, on_error=fail, on_status=self.info.setText)
+
+    def _open_bedrock_launcher(self):
+        from jace import bedrock
+        try:
+            bedrock.open_launcher()
+        except (OSError, bedrock.BedrockError) as e:
+            show_error(self, str(e))
+            return
+        self.info.setText("Sign in to Google Play in the Minecraft Bedrock Launcher and download a version there "
+                          "(you don't need to start it). Then click Refresh.")
+
+    def _load_bedrock_versions(self):
+        from jace import bedrock
+        self._bedrock_mode(True)
+        self.version.clear()
+        why = bedrock.unsupported_reason()
+        have = bedrock.installed()
+        self.br_install.setVisible(not have)
+        self.br_install.setEnabled(not why)
+        self.br_download.setVisible(bool(have))
+        vs = bedrock.installed_versions() if have else []
+        for v in vs:
+            self.version.addItem(v["name"], v["name"])
+        if why:
+            self.info.setText(why)
+        elif not have:
+            self.info.setText("Bedrock runs through the Minecraft Bedrock Launcher, which plays the Android version of "
+                              "Minecraft. You need to own Minecraft on Google Play. Install it, then download a version.")
+        elif not vs:
+            self.info.setText("No Bedrock versions downloaded yet. Click Download versions…, sign in to Google Play "
+                              "there and download one, then click Refresh.")
+        else:
+            self.info.setText("Each Bedrock instance has its own worlds and packs. More versions: Download versions…")
+
     def _load_versions(self):
         lid = self._lid()
+        if lid == "bedrock":
+            self._load_bedrock_versions()
+            return
+        self._bedrock_mode(False)
         self.info.setText("Loading versions...")
         self.version.clear()
         self.loader_version.clear()
@@ -131,6 +205,8 @@ class NewInstanceDialog(QDialog):
             show_error(self, "Pick a loader version.")
             return
         name = self.name.text().strip() or (f"{loader.name} {mc}" if loader.id != "vanilla" else mc)
+        if loader.id == "bedrock":
+            lver = ""
         self.result_instance = create_instance(name, mc, loader.id, lver)
         self.accept()
 
@@ -416,6 +492,83 @@ class SyncTab(QWidget):
             cb.blockSignals(False)
 
 
+class BedrockContentTab(QWidget):
+    """A Bedrock instance's worlds or packs: list, Import / Delete / Open folder / Browse."""
+    LABELS = {"resource": "Resource pack", "behavior": "Behavior pack", "skin": "Skin pack",
+              "template": "World template", "world": "World"}
+
+    def __init__(self, inst: Instance, kinds: list[str], browse_cb):
+        super().__init__()
+        from jace import bedrock
+        self.inst, self.kinds, self.bedrock = inst, kinds, bedrock
+        lay = QVBoxLayout(self)
+        self.list = QListWidget()
+        lay.addWidget(self.list, 1)
+        row = QHBoxLayout()
+        b = QPushButton("Browse && download")
+        b.setObjectName("primary")
+        b.clicked.connect(lambda: browse_cb(inst, "bedrock_world" if kinds == ["world"] else "bedrock_addon"))
+        imp = QPushButton("Import file…")
+        imp.clicked.connect(self._import)
+        op = QPushButton("Open folder")
+        op.clicked.connect(lambda: open_folder(self._folder()))
+        rm = QPushButton("Delete")
+        rm.setObjectName("danger")
+        rm.clicked.connect(self._delete)
+        for w in (b, imp, op):
+            row.addWidget(w)
+        row.addStretch()
+        row.addWidget(rm)
+        lay.addLayout(row)
+        self.refresh()
+
+    def _folder(self) -> Path:
+        d = self.bedrock.com_mojang(self.inst.game_dir) / self.bedrock.FOLDERS[self.kinds[0]]
+        d.mkdir(parents=True, exist_ok=True)
+        return d
+
+    def refresh(self):
+        self.list.clear()
+        content = self.bedrock.list_content(self.inst.game_dir)
+        for kind in self.kinds:
+            for item in content.get(kind, []):
+                it = QListWidgetItem(item["name"] if len(self.kinds) == 1 else f"{item['name']}  ·  {self.LABELS[kind]}")
+                it.setData(Qt.ItemDataRole.UserRole, item["path"])
+                self.list.addItem(it)
+        if self.list.count() == 0:
+            self.list.addItem("Nothing here yet. Import a file, or Browse & download from Jace Store.")
+
+    def _import(self):
+        files, _ = QFileDialog.getOpenFileNames(self, "Import Bedrock files", "",
+                                                "Bedrock files (*.mcpack *.mcaddon *.mcworld *.mctemplate *.zip)")
+        added, problems = [], []
+        for f in files:
+            try:
+                added += self.bedrock.import_file(f, self.inst.game_dir)
+            except (OSError, self.bedrock.BedrockError) as e:
+                problems.append(str(e))
+        self.refresh()
+        if problems:
+            show_error(self, "\n".join(problems), "Some files weren't imported")
+        if added:
+            QMessageBox.information(self, "Imported", "\n".join(added) +
+                                    "\n\nTurn packs on in a world's Resource Packs / Behavior Packs settings.")
+
+    def _delete(self):
+        it = self.list.currentItem()
+        path = it and it.data(Qt.ItemDataRole.UserRole)
+        if not path:
+            return
+        if QMessageBox.question(self, "Delete", f"Delete {it.text().split('  ·  ')[0]}? This can't be undone."
+                                ) != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            self.bedrock.remove(path, self.inst.game_dir)
+        except (OSError, self.bedrock.BedrockError) as e:
+            show_error(self, str(e))
+        self.refresh()
+
+
 class InstanceDialog(QDialog):
     def __init__(self, inst: Instance, browse_cb, parent=None):
         super().__init__(parent)
@@ -427,15 +580,37 @@ class InstanceDialog(QDialog):
         lay.addWidget(head)
         tabs = QTabWidget()
         lay.addWidget(tabs)
-        if inst.loader != "vanilla":
-            tabs.addTab(ContentTab(inst, "mod", self._browse(browse_cb)), "Mods")
-        tabs.addTab(ContentTab(inst, "resourcepack", self._browse(browse_cb)), "Resource packs")
-        tabs.addTab(ContentTab(inst, "shader", self._browse(browse_cb)), "Shaders")
+        if inst.is_bedrock:
+            tabs.addTab(BedrockContentTab(inst, ["world"], self._browse(browse_cb)), "Worlds")
+            tabs.addTab(BedrockContentTab(inst, ["behavior", "resource", "skin", "template"],
+                                          self._browse(browse_cb)), "Packs")
+        else:
+            if inst.loader != "vanilla":
+                tabs.addTab(ContentTab(inst, "mod", self._browse(browse_cb)), "Mods")
+            tabs.addTab(ContentTab(inst, "resourcepack", self._browse(browse_cb)), "Resource packs")
+            tabs.addTab(ContentTab(inst, "shader", self._browse(browse_cb)), "Shaders")
 
         w = QWidget()
         f = QFormLayout(w)
         self.name = QLineEdit(inst.name)
         f.addRow("Name", self.name)
+
+        ver_row = QHBoxLayout()
+        self.version = QComboBox()
+        self.version.setMinimumWidth(180)
+        self.loader_ver = QComboBox()
+        self.loader_ver.setMinimumWidth(160)
+        ver_row.addWidget(self.version)
+        ver_row.addWidget(self.loader_ver)
+        if inst.is_bedrock:
+            dl = QPushButton("Download versions…")
+            dl.setToolTip("Opens the Minecraft Bedrock Launcher to download more Bedrock versions")
+            dl.clicked.connect(self._bedrock_download)
+            ver_row.addWidget(dl)
+        ver_row.addStretch()
+        f.addRow("Bedrock version" if inst.is_bedrock else "Minecraft version", ver_row)
+        self.version.currentIndexChanged.connect(self._load_loader_versions)
+        self._load_game_versions()
 
         icon_row = QHBoxLayout()
         self.icon_preview = QLabel()
@@ -499,8 +674,75 @@ class InstanceDialog(QDialog):
         save.setObjectName("primary")
         save.clicked.connect(self._save)
         f.addRow("", save)
-        tabs.addTab(SyncTab(inst), "Sync")
+        if inst.is_bedrock:
+            for field in (self.mem, self.java, self.jvm, repair):
+                f.setRowVisible(field, False)
+        else:
+            tabs.addTab(SyncTab(inst), "Sync")
         tabs.addTab(w, "Settings")
+
+    # -- version
+    def _load_game_versions(self):
+        inst = self.inst
+        loader = LOADERS.get(inst.loader)
+        self.loader_ver.setVisible(bool(loader and loader.needs_loader_version))
+
+        def fetch():
+            if inst.is_bedrock:
+                return [v for v in loader.game_versions()]
+            types = {v["id"]: v["type"] for v in mojang_versions()}
+            vs = sort_versions(loader.game_versions(include_unstable=True))
+            return [v for v in vs if types.get(v, "snapshot") == "release" or v == inst.mc_version]
+
+        def done(vs):
+            self.version.blockSignals(True)
+            self.version.clear()
+            for v in ([inst.mc_version] if inst.mc_version not in vs else []) + vs:
+                self.version.addItem(v if v in vs or inst.is_bedrock is False else f"{v}  (not downloaded)", v)
+            self.version.setCurrentIndex(max(0, self.version.findData(inst.mc_version)))
+            self.version.blockSignals(False)
+            self._load_loader_versions()
+        if loader:
+            run_task(fetch, on_done=done, on_error=lambda m: None)
+
+    def _load_loader_versions(self):
+        loader = LOADERS.get(self.inst.loader)
+        mc = self.version.currentData()
+        self.loader_ver.clear()
+        if not loader or not loader.needs_loader_version or not mc:
+            return
+
+        def done(vs):
+            if self.version.currentData() != mc:
+                return
+            self.loader_ver.clear()
+            self.loader_ver.addItems(vs)
+            if mc == self.inst.mc_version and self.inst.loader_version in vs:
+                self.loader_ver.setCurrentText(self.inst.loader_version)
+        run_task(loader.loader_versions, mc, on_done=done, on_error=lambda m: None)
+
+    def _bedrock_download(self):
+        from jace import bedrock
+        try:
+            bedrock.open_launcher()
+        except (OSError, bedrock.BedrockError) as e:
+            show_error(self, str(e))
+            return
+        QMessageBox.information(self, "Download versions", "Download Bedrock versions in the Minecraft Bedrock "
+                                "Launcher window (sign in to Google Play the first time). When it's done, "
+                                "reopen these settings to pick the new version.")
+
+    def _apply_version(self):
+        """Switch to the chosen version; game files are fetched on the next Play."""
+        mc = self.version.currentData()
+        loader = LOADERS.get(self.inst.loader)
+        lver = self.loader_ver.currentText() if loader and loader.needs_loader_version else ""
+        if not mc or (mc == self.inst.mc_version and lver == self.inst.loader_version):
+            return
+        if loader and loader.needs_loader_version and not lver:
+            return
+        self.inst.data.update({"mc_version": mc, "loader_version": lver})
+        self.inst.data.pop("version_id", None)
 
     def _browse(self, cb):
         def go(inst, kind):
@@ -509,6 +751,7 @@ class InstanceDialog(QDialog):
         return go
 
     def _save(self):
+        self._apply_version()
         self.inst.data.update({"name": self.name.text().strip() or self.inst.name, "memory_mb": self.mem.value(),
                                "java_path": self.java.text().strip(), "jvm_args": self.jvm.text().strip(),
                                "window_width": self.win_w.value(), "window_height": self.win_h.value()})
