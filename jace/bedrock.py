@@ -130,6 +130,11 @@ def client_command(version: str, data: Path, width: int = 0, height: int = 0) ->
         raise BedrockError(f"Bedrock {version} isn't downloaded. Click \"Download versions\" (it opens the "
                            f"Minecraft Bedrock Launcher) and download it there, then press Play again.")
     args = ["-dg", str(vdir), "-dd", str(data)]
+    mods = launcher_mods()
+    if mods:
+        # Bedrock 1.21.120+ needs mcpelauncher's "mcpelauncher-updates" mod (it adds things like
+        # pthread_sigmask that newer versions use); without it the game fails to load.
+        args += ["-m", ",".join(mods)]
     if width > 0 and height > 0:
         args += ["-ww", str(width), "-wh", str(height)]
     kind = installed()
@@ -145,6 +150,32 @@ def client_command(version: str, data: Path, width: int = 0, height: int = 0) ->
         if client:
             return [str(client), *args]
     raise BedrockError("Install the Minecraft Bedrock Launcher first")
+
+
+def launcher_mods() -> list[str]:
+    """Mod folders mcpelauncher's window would load: the ones turned on in its Default profile
+    (profiles/profiles.ini, "mods\\N\\path="), or else the newest mcpelauncher-updates for this CPU."""
+    mods = []
+    ini = data_dir() / "profiles" / "profiles.ini"
+    if ini.is_file():
+        section = None
+        for line in ini.read_text(errors="replace").splitlines():
+            line = line.strip()
+            if line.startswith("["):
+                section = line.strip("[]")
+            elif section == "Default" and re.match(r"mods\\\d+\\path=", line):
+                path = line.split("=", 1)[1].strip()
+                if Path(path).is_dir():
+                    mods.append(path.rstrip("/"))
+    if not mods:
+        arch = {"x86_64": "x86_64", "AMD64": "x86_64", "arm64": "arm64-v8a", "aarch64": "arm64-v8a"}.get(
+            __import__("platform").machine(), "x86_64")
+        base = data_dir() / "mods" / "mcpelauncher-updates"
+        found = sorted((d for d in base.glob(f"*/{arch}") if (d / "mod.json").is_file()),
+                       key=lambda d: _version_key(d.parent.name), reverse=True)
+        if found:
+            mods.append(str(found[0]))
+    return mods
 
 
 def com_mojang(root: Path | None = None) -> Path:

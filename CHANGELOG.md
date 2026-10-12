@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.6.1
+- **Bedrock 1.21.120 and newer start now.** They crashed with `cannot locate symbol "pthread_sigmask"`. Jace Launcher now loads the same mods as the Minecraft Bedrock Launcher's own Play button, including its required "mcpelauncher-updates" fix-up mod.
+- The first time, the Minecraft Bedrock Launcher may ask whether that mod can use your Google Play sign-in (for the license check). Allow it to play.
+
 ## 1.6.0
 - **Bedrock instances:** Minecraft Bedrock now works like a normal instance, and the separate Bedrock tab is gone.
   - **Library → New instance → Mod loader: Bedrock**, then pick a Bedrock version. **Play** starts that version.
