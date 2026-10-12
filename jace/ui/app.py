@@ -19,6 +19,7 @@ from jace.ui.browse_page import BrowsePage
 from jace.ui.common import STYLE, run_task, show_error
 from jace.ui.friends_page import FriendsPage
 from jace.ui.social_live import SocialLive
+from jace.ui.bedrock_page import BedrockPage
 from jace.ui import launcher_link
 from jace.ui.calls import CallManager, Media, RoomManager
 from jace.instance_icons import icon_image
@@ -103,10 +104,12 @@ class MainWindow(QMainWindow):
         self.skins = SkinsPage(self)
         self.accounts_page = AccountsPage()
         self.friends_page = FriendsPage()
+        self.bedrock_page = BedrockPage()
         self.settings_page = SettingsPage()
         for i, (label, page) in enumerate((("🎮  Library", self.library), ("🧩  Browse", self.browse),
                                            ("👕  Skins && Capes", self.skins), ("👤  Accounts", self.accounts_page),
                                            ("👥  Friends", self.friends_page),
+                                           ("🟩  Bedrock", self.bedrock_page),
                                            ("⚙  Settings", self.settings_page))):
             b = QPushButton(label)
             b.setObjectName("nav")

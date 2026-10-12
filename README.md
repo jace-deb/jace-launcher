@@ -32,6 +32,10 @@ A desktop launcher for Minecraft: Java Edition, written in Python and Qt (PySide
 - **Friends list**: add friends by Minecraft username and see their skin. Save the server they play on to see if they're online there, and click **Join** to launch straight into it. There's no Jace Launcher server, so "online" only works on servers that share their player list.
 - **Voice calls**: call a friend from their chat. In game, the Jace Social mod controls the call through the launcher. That only works when the game was started from Jace Launcher.
 - **Server add-ons**: one-click LuckPerms, WorldEdit, Chunky, spark and Ledger (an instance's **Mods** tab) for worlds you host with the Jace Social mod.
+- **Minecraft Bedrock** (🟩 Bedrock page):
+  - **Linux and macOS:** installs and starts the [Minecraft Bedrock Launcher](https://minecraft-linux.github.io), which needs Minecraft owned on Google Play.
+  - **Windows:** opens Bedrock from the Microsoft Store.
+  - Manages Bedrock worlds and packs, imports `.mcpack`, `.mcaddon`, `.mcworld` and `.mctemplate` files, and installs Bedrock content from Jace Store.
 - **Game log** window, plus per-instance memory, Java and JVM argument overrides.
 
 ## Running

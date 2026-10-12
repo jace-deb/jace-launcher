@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.5.0
+- **Minecraft Bedrock** (new 🟩 Bedrock page):
+  - **Linux and macOS:** one click installs the [Minecraft Bedrock Launcher](https://minecraft-linux.github.io): from Flathub on Linux, the Mac app on macOS. **Play Bedrock** starts it, and **Update** keeps it current. It runs the Android version of Bedrock, so you need to own Minecraft on Google Play. You sign in with Google in its own window; Jace Launcher never sees your Google account.
+  - **Windows:** **Play Bedrock** opens Minecraft from the Microsoft Store / Xbox app.
+  - **Worlds and Packs** tabs list your Bedrock worlds and resource, behavior and skin packs, and let you delete them.
+  - **Import file…** adds `.mcpack`, `.mcaddon`, `.mcworld` and `.mctemplate` files. A newer copy of a pack replaces the old one, and files that try to write outside Minecraft's folder are refused.
+  - **Jace Store** tab: search and install from Jace Store's new Minecraft Bedrock section: add-ons, texture packs, worlds, skin packs and world templates.
+
 ## 1.4.5
 - **Linux:** Jace Launcher shows up only once in your app menu. AppImageLauncher used to add a second "Jace Launcher (1)" entry. The AppImage now tells it not to, and Jace Launcher removes any such duplicate when it starts.
 
