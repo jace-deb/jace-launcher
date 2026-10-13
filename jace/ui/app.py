@@ -408,15 +408,16 @@ class MainWindow(QMainWindow):
         if inst is None or self.busy:
             return
         acc = accounts.current()
-        if not acc and not inst.is_bedrock:     # Bedrock signs in with Google Play inside its own launcher
+        if not acc and inst.is_java:            # Bedrock / Education sign in inside their own apps
             QMessageBox.information(self, "No account", "Add a Microsoft or offline account first.")
             self.go(3)
             return
 
         def prepare(callback):
-            account = accounts.ensure_fresh(acc) if acc and not inst.is_bedrock else (acc or {})
+            account = accounts.ensure_fresh(acc) if acc and inst.is_java else (acc or {})
             inst.install(callback)
-            callback["setStatus"]("Starting Minecraft Bedrock…" if inst.is_bedrock else "Starting Minecraft…")
+            callback["setStatus"]("Starting Minecraft Education…" if inst.is_education else
+                                  "Starting Minecraft Bedrock…" if inst.is_bedrock else "Starting Minecraft…")
             return inst.launch(account, server)
 
         def started(proc):
@@ -436,6 +437,9 @@ class MainWindow(QMainWindow):
 
     def _game_exited(self, con, inst, code):
         con.state.setText(f"Exited with code {code}")
+        if inst.is_education:                     # free Waydroid's memory when the window closes
+            from jace import education
+            threading.Thread(target=education.stop_session, daemon=True).start()
         self.playing = None
         self._send_presence()
         if self.isHidden():
@@ -589,7 +593,7 @@ def quick_launch(argv) -> bool:
         show_error(None, f"This shortcut's instance ({iid}) no longer exists.", "Instance not found")
         return True
     acc = accounts.current()
-    if not acc and not inst.is_bedrock:
+    if not acc and inst.is_java:
         QMessageBox.information(None, "Add an account", "Add a Microsoft or offline account first, then try the "
                                 "shortcut again.")
         return False
@@ -613,7 +617,7 @@ def quick_launch(argv) -> bool:
     lay.addLayout(col, 1)
 
     def prepare(callback):
-        account = accounts.ensure_fresh(acc) if acc and not inst.is_bedrock else (acc or {})
+        account = accounts.ensure_fresh(acc) if acc and inst.is_java else (acc or {})
         inst.install(callback)
         callback["setStatus"]("Starting Minecraft…")
         proc = inst.launch(account, detached=True)

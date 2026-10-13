@@ -166,8 +166,26 @@ LOADERS = {
     "neoforge": ForgeLike("neoforge", "NeoForge"),
     "legacyfabric": FabricLike("legacyfabric", "Legacy Fabric", "https://meta.legacyfabric.net/v2"),
 }
+class EducationLoader:
+    """Minecraft Education's Android app in Waydroid (Linux). "Versions" are the app and its Preview."""
+    id, name = "education", "Education"
+    needs_loader_version = False
+
+    def game_versions(self, include_unstable=True):
+        from jace.education import PACKAGES
+        return list(PACKAGES)
+
+    def loader_versions(self, mc):
+        return []
+
+    def install(self, mc, loader_version, callback):
+        return ""
+
+
 if sys.platform != "win32":         # Windows has the real Bedrock (Microsoft Store), not mcpelauncher
     LOADERS["bedrock"] = BedrockLoader()
+if sys.platform.startswith("linux"):   # Windows / macOS have Minecraft Education's own desktop app
+    LOADERS["education"] = EducationLoader()
 
 # Names used by Modrinth / CurseForge for each loader
 MODRINTH_LOADER = {"fabric": "fabric", "quilt": "quilt", "forge": "forge",

@@ -46,6 +46,10 @@ class Instance:
     @property
     def is_bedrock(self) -> bool: return self.loader == "bedrock"
     @property
+    def is_education(self) -> bool: return self.loader == "education"
+    @property
+    def is_java(self) -> bool: return not (self.is_bedrock or self.is_education)
+    @property
     def icon_path(self) -> Path: return self.folder / "icon.png"
 
     def window_size(self) -> tuple[int, int]:
@@ -63,6 +67,8 @@ class Instance:
     def describe(self) -> str:
         if self.is_bedrock:
             return f"Bedrock {self.mc_version}"
+        if self.is_education:
+            return self.mc_version or "Minecraft Education"
         if self.loader == "vanilla":
             return f"Vanilla {self.mc_version}"
         return f"{LOADERS[self.loader].name} {self.loader_version} · {self.mc_version}"
@@ -72,6 +78,12 @@ class Instance:
 
     # -- install & launch --
     def install(self, callback: dict, force=False):
+        if self.is_education:
+            from jace import education
+            why = education.problem(bool(self.data.get("fullscreen")))
+            if why:
+                raise education.EducationError(why)
+            return
         if self.is_bedrock:
             from jace import bedrock
             if not bedrock.installed():
@@ -101,6 +113,11 @@ class Instance:
         return False
 
     def build_command(self, account: dict, server: str | None = None) -> list[str]:
+        if self.is_education:
+            from jace import education
+            w, h = (int(self.data.get("window_width") or 0), int(self.data.get("window_height") or 0))
+            pkg = education.PACKAGES.get(self.mc_version, education.PACKAGES["Minecraft Education"])
+            return education.launch_command(pkg, bool(self.data.get("fullscreen")), w, h)
         if self.is_bedrock:
             from jace import bedrock
             w, h = (int(self.data.get("window_width") or 0), int(self.data.get("window_height") or 0))
@@ -145,7 +162,7 @@ class Instance:
         self.data["last_played"] = time.time()
         self.save()
         kwargs = {}
-        if self.is_bedrock:
+        if not self.is_java:
             from jace.bedrock import _clean_env
             kwargs["env"] = _clean_env()      # our AppImage's library paths would break flatpak/mcpelauncher
         if sys.platform == "win32":
@@ -193,7 +210,7 @@ def create_instance(name: str, mc_version: str, loader: str = "vanilla", loader_
                  "loader_version": loader_version, "created": time.time(), **(extra or {})}
     inst.save()
     inst.game_dir.mkdir(parents=True, exist_ok=True)
-    if "modpack" not in inst.data and loader != "bedrock":   # (modpacks keep their own packs; Bedrock has its own folders)
+    if "modpack" not in inst.data and loader not in ("bedrock", "education"):   # (modpacks keep their own packs; Bedrock has its own folders)
         from jace import sync
         sync.apply_defaults(inst)
     return inst

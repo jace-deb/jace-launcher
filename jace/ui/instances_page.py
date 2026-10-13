@@ -1,5 +1,6 @@
 """Library of instances, the new-instance dialog and the instance editor."""
 import shutil
+import subprocess
 from pathlib import Path
 
 from PySide6.QtCore import QSize, Qt, Signal
@@ -67,7 +68,11 @@ class NewInstanceDialog(QDialog):
         self.br_download.clicked.connect(self._open_bedrock_launcher)
         self.br_refresh = QPushButton("Refresh")
         self.br_refresh.clicked.connect(self._load_versions)
-        for b in (self.br_install, self.br_download, self.br_refresh):
+        self.edu_setup = QPushButton("Set up Waydroid")
+        self.edu_setup.setObjectName("primary")
+        self.edu_setup.clicked.connect(self._setup_waydroid)
+        self.edu_setup.hide()
+        for b in (self.br_install, self.br_download, self.edu_setup, self.br_refresh):
             brow.addWidget(b)
         brow.addStretch()
         self.br_row = QWidget()
@@ -94,6 +99,15 @@ class NewInstanceDialog(QDialog):
         for w in (self.snapshots, self.old):
             w.setVisible(not on)
         self.loader_version.setVisible(not on)
+
+    def _setup_waydroid(self):
+        from jace import education
+        try:
+            education.open_setup_terminal()
+        except (OSError, education.EducationError) as e:
+            show_error(self, str(e))
+            return
+        self.info.setText("Finish the setup in the terminal window (it asks for your password), then click Refresh.")
 
     def _install_bedrock(self):
         from jace import bedrock
@@ -141,8 +155,27 @@ class NewInstanceDialog(QDialog):
         else:
             self.info.setText("Each Bedrock instance has its own worlds and packs. More versions: Download versions…")
 
+    def _load_education(self):
+        from jace import education
+        self._bedrock_mode(True)
+        self.br_install.setVisible(False)
+        self.br_download.setVisible(False)
+        self.version.clear()
+        for name in education.PACKAGES:
+            self.version.addItem(name, name)
+        ready = education.problem() is None
+        self.edu_setup.setVisible(not ready)
+        self.info.setText("Minecraft Education's Android app, running in Waydroid (shown in a Cage window, or full "
+                          "screen with Gamescope). Sign in with your school's Microsoft 365 Education account. "
+                          + ("" if ready else "Waydroid needs a one-time setup: click Set up Waydroid "
+                                              "(it asks for your password in a terminal)."))
+
     def _load_versions(self):
         lid = self._lid()
+        self.edu_setup.setVisible(False)
+        if lid == "education":
+            self._load_education()
+            return
         if lid == "bedrock":
             self._load_bedrock_versions()
             return
@@ -569,6 +602,85 @@ class BedrockContentTab(QWidget):
         self.refresh()
 
 
+class EducationSetupTab(QWidget):
+    """What Minecraft Education needs (Waydroid, Cage, Gamescope) and getting the app."""
+
+    def __init__(self, inst: Instance):
+        super().__init__()
+        from jace import education
+        self.inst, self.education = inst, education
+        lay = QVBoxLayout(self)
+        intro = QLabel("Minecraft Education runs as its Android app in <b>Waydroid</b>, shown in a <b>Cage</b> window, "
+                       "or full screen inside <b>Gamescope</b> (Settings → Full screen). Sign in inside the app "
+                       "with your school's Microsoft 365 Education account.")
+        intro.setWordWrap(True)
+        lay.addWidget(intro)
+        self.checks = QLabel()
+        self.checks.setTextFormat(Qt.TextFormat.RichText)
+        lay.addWidget(self.checks)
+        row = QHBoxLayout()
+        setup = QPushButton("Set up Waydroid")
+        setup.setObjectName("primary")
+        setup.setToolTip("Opens a terminal that installs Waydroid, Cage and Gamescope and downloads Android "
+                         "with Google Play. You type your password there.")
+        setup.clicked.connect(self._setup)
+        play = QPushButton("Open Google Play")
+        play.setToolTip("Opens Android's Play Store in a Cage window: sign in and install Minecraft Education")
+        play.clicked.connect(self._play_store)
+        apk = QPushButton("Install APK…")
+        apk.clicked.connect(self._apk)
+        ref = QPushButton("Refresh")
+        ref.clicked.connect(self.refresh)
+        for b in (setup, play, apk, ref):
+            row.addWidget(b)
+        row.addStretch()
+        lay.addLayout(row)
+        self.note = QLabel("")
+        self.note.setObjectName("muted")
+        self.note.setWordWrap(True)
+        lay.addWidget(self.note)
+        lay.addStretch()
+        self.refresh()
+
+    def refresh(self):
+        s = self.education.status()
+        def line(ok, text):
+            return f"<span style='color:{'#3ddc84' if ok else '#e0605a'}'>{'✓' if ok else '✗'}</span> {text}"
+        self.checks.setText("<br>".join([
+            line(s["waydroid"], "Waydroid installed"),
+            line(s["initialized"], "Android downloaded (waydroid init)"),
+            line(s["container"], "Waydroid service running"),
+            line(s["cage"], "Cage installed (the game window)"),
+            line(s["gamescope"], "Gamescope installed (only needed for Full screen)"),
+        ]))
+
+    def _setup(self):
+        try:
+            self.education.open_setup_terminal()
+            self.note.setText("Follow the terminal window (it asks for your password), then click Refresh.")
+        except (OSError, self.education.EducationError) as e:
+            show_error(self, str(e))
+
+    def _play_store(self):
+        try:
+            cmd = self.education.launch_command(self.education.PLAY_STORE)
+            subprocess.Popen(cmd, start_new_session=True, env=self.education._clean_env(),
+                             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            self.note.setText("Google Play is opening. Sign in, search for Minecraft Education and install it. "
+                              "If Play says the device isn't certified, see docs.waydro.id/faq/google-play-certification")
+        except (OSError, self.education.EducationError) as e:
+            show_error(self, str(e))
+
+    def _apk(self):
+        path, _ = QFileDialog.getOpenFileName(self, "Minecraft Education APK", "", "Android apps (*.apk)")
+        if not path:
+            return
+        self.note.setText("Installing…")
+        run_task(self.education.install_apk, path, on_status=self.note.setText,
+                 on_done=lambda _: self.note.setText("Installed! Close this and press Play."),
+                 on_error=lambda m: (self.note.setText(""), show_error(self, m)))
+
+
 class InstanceDialog(QDialog):
     def __init__(self, inst: Instance, browse_cb, parent=None):
         super().__init__(parent)
@@ -580,7 +692,9 @@ class InstanceDialog(QDialog):
         lay.addWidget(head)
         tabs = QTabWidget()
         lay.addWidget(tabs)
-        if inst.is_bedrock:
+        if inst.is_education:
+            tabs.addTab(EducationSetupTab(inst), "Setup")
+        elif inst.is_bedrock:
             tabs.addTab(BedrockContentTab(inst, ["world"], self._browse(browse_cb)), "Worlds")
             tabs.addTab(BedrockContentTab(inst, ["behavior", "resource", "skin", "template"],
                                           self._browse(browse_cb)), "Packs")
@@ -608,7 +722,7 @@ class InstanceDialog(QDialog):
             dl.clicked.connect(self._bedrock_download)
             ver_row.addWidget(dl)
         ver_row.addStretch()
-        f.addRow("Bedrock version" if inst.is_bedrock else "Minecraft version", ver_row)
+        f.addRow("Bedrock version" if inst.is_bedrock else "App" if inst.is_education else "Minecraft version", ver_row)
         self.version.currentIndexChanged.connect(self._load_loader_versions)
         self._load_game_versions()
 
@@ -643,6 +757,10 @@ class InstanceDialog(QDialog):
             size_row.addWidget(b)
         size_row.addStretch()
         f.addRow("Window size", size_row)
+        self.fullscreen = QCheckBox("Full screen (opens in Gamescope)")
+        self.fullscreen.setChecked(bool(inst.data.get("fullscreen")))
+        if inst.is_education:
+            f.addRow("Display", self.fullscreen)
         self.mem = QSpinBox()
         self.mem.setRange(0, max(1024, total_ram_mb()))
         self.mem.setSingleStep(512)
@@ -674,7 +792,7 @@ class InstanceDialog(QDialog):
         save.setObjectName("primary")
         save.clicked.connect(self._save)
         f.addRow("", save)
-        if inst.is_bedrock:
+        if not inst.is_java:
             for field in (self.mem, self.java, self.jvm, repair):
                 f.setRowVisible(field, False)
         else:
@@ -688,7 +806,7 @@ class InstanceDialog(QDialog):
         self.loader_ver.setVisible(bool(loader and loader.needs_loader_version))
 
         def fetch():
-            if inst.is_bedrock:
+            if not inst.is_java:
                 return [v for v in loader.game_versions()]
             types = {v["id"]: v["type"] for v in mojang_versions()}
             vs = sort_versions(loader.game_versions(include_unstable=True))
@@ -752,6 +870,8 @@ class InstanceDialog(QDialog):
 
     def _save(self):
         self._apply_version()
+        if self.inst.is_education:
+            self.inst.data["fullscreen"] = self.fullscreen.isChecked()
         self.inst.data.update({"name": self.name.text().strip() or self.inst.name, "memory_mb": self.mem.value(),
                                "java_path": self.java.text().strip(), "jvm_args": self.jvm.text().strip(),
                                "window_width": self.win_w.value(), "window_height": self.win_h.value()})

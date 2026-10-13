@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.7.0
+- **Minecraft Education on Linux:** **New instance → Mod loader: Education** (Minecraft Education or its Preview).
+  - The Android app runs in **Waydroid**, shown in a **Cage** window.
+  - Tick **Settings → Full screen** to open it truly full screen with **Gamescope**.
+  - Sign in inside the app with your school's Microsoft 365 Education account.
+  - The instance's **Setup** tab shows what's ready.
+    - **Set up Waydroid** opens a terminal that installs Waydroid, Cage and Gamescope and downloads Android with Google Play. You type your password there, once.
+    - **Open Google Play** lets you install the app.
+    - **Install APK…** installs one you already have.
+  - When you close the game, Waydroid stops so it doesn't keep using memory.
+
 ## 1.6.1
 - **Bedrock 1.21.120 and newer start now.** They crashed with `cannot locate symbol "pthread_sigmask"`. Jace Launcher now loads the same mods as the Minecraft Bedrock Launcher's own Play button, including its required "mcpelauncher-updates" fix-up mod.
 - The first time, the Minecraft Bedrock Launcher may ask whether that mod can use your Google Play sign-in (for the license check). Allow it to play.

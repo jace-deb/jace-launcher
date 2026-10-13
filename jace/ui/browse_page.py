@@ -191,6 +191,8 @@ class BrowsePage(QWidget):
         self.target.blockSignals(True)
         self.target.clear()
         for inst in list_instances():
+            if inst.is_education:                  # Education content comes from inside the app
+                continue
             self.target.addItem(f"{inst.name}  ({inst.describe()})", inst.id)
         idx = self.target.findData(cur)
         if idx >= 0:
