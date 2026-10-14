@@ -28,4 +28,4 @@ jobs:
         env:
           FULL: "1"
           JACE_LAUNCHER_HOME: ${{ runner.temp }}/jace-home
-        run: python tests/official_check.py
+        run: python -u tests/official_check.py

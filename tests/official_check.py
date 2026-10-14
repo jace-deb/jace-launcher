@@ -30,10 +30,20 @@ if o.IS_WIN:
         assert r.returncode == 0, f"{kind} launch script doesn't parse:\n{r.stdout}{r.stderr}"
     o.win_package = real
 
+def status(msg, _last=[""]):
+    if msg.startswith("Downloading") and "%" in msg:
+        pct = msg.split("…")[1].split("%")[0].strip()
+        if pct == _last[0] or int(pct) % 10:
+            return
+        _last[0] = pct
+    print(msg, flush=True)
+
+
 if os.environ.get("FULL"):
-    o.ensure("education", print)
+    os.environ["JACE_NO_INTERACTIVE"] = "1"
+    o.ensure("education", status)
     assert o.installed("education"), "Minecraft Education not found after installing"
     print("installed:", o.win_package("education") if o.IS_WIN else o.mac_app())
     print("launch:", o.launch_command("education")[:4])
-    o.ensure("education", print)             # second time: already up to date, no download
+    o.ensure("education", status)            # second time: already up to date, no download
 print("OFFICIAL OK")

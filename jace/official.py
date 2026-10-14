@@ -70,9 +70,16 @@ if ($p) {{
 
 
 def mac_app() -> Path | None:
-    for d in (Path("/Applications"), HOME / "Applications"):
-        for app in sorted(d.glob("Minecraft*Education*.app")):
+    try:                                         # where Jace Launcher installed it
+        app = Path(json.loads(MAC_STATE.read_text())["app"])
+        if app.is_dir():
             return app
+    except (OSError, ValueError, KeyError):
+        pass
+    for d in (Path("/Applications"), HOME / "Applications"):
+        for pattern in ("Minecraft*Education*.app", "*Education*.app"):
+            for app in sorted(d.glob(pattern)):
+                return app
     return None
 
 
@@ -147,12 +154,15 @@ def _education_windows(status):
         exe = Path(tmp) / Path(url).name
         _download(url, exe, status, "Minecraft Education" + (" (update)" if pkg else ""))
         status("Installing Minecraft Education…")
-        r = subprocess.run([str(exe), "/quiet", "/norestart"], **_no_window())
-        if not win_package("education"):
+        try:
+            code = subprocess.run([str(exe), "/quiet", "/norestart"], timeout=1200, **_no_window()).returncode
+        except subprocess.TimeoutExpired:
+            code = "timed out"
+        if not win_package("education") and not os.environ.get("JACE_NO_INTERACTIVE"):
             status("Finish installing Minecraft Education in its installer window…")
             subprocess.run([str(exe)])           # the normal installer, if the quiet install didn't work
     if not win_package("education"):
-        raise OfficialError(f"Minecraft Education didn't install (installer exit code {r.returncode}).")
+        raise OfficialError(f"Minecraft Education didn't install (quiet installer: {code}).")
     status("Minecraft Education installed")
 
 
@@ -196,6 +206,7 @@ def _education_mac(status):
             if dest.exists():
                 shutil.rmtree(dest, ignore_errors=True)
             subprocess.run(["ditto", str(src), str(dest)], check=True)
+            status(f"Installed {dest}")
         finally:
             subprocess.run(["hdiutil", "detach", str(mnt), "-force"], capture_output=True)
     _save_mac_state({"version": latest, "app": str(dest)})
