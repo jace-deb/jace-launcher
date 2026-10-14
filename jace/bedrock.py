@@ -52,7 +52,12 @@ class BedrockError(Exception):
 # --- where things are ----------------------------------------------------------------
 
 def _run(cmd, **kw) -> subprocess.CompletedProcess:
-    return subprocess.run(cmd, capture_output=True, text=True, **kw)
+    # never let flatpak & co. see the AppImage's own libraries (they break the system's flatpak)
+    kw.setdefault("env", _clean_env())
+    try:
+        return subprocess.run(cmd, capture_output=True, text=True, **kw)
+    except OSError as e:
+        return subprocess.CompletedProcess(cmd, 1, "", str(e))
 
 
 def flatpak_installed() -> bool:
@@ -215,8 +220,10 @@ def install(status=print):
     _run(["flatpak", "remote-add", "--user", "--if-not-exists", "flathub", FLATHUB])
     status("Installing the Minecraft Bedrock Launcher from Flathub (this can take a few minutes)…")
     r = _run(["flatpak", "install", "--user", "-y", "--noninteractive", "flathub", FLATPAK_ID])
-    if r.returncode != 0:
-        raise BedrockError("Flatpak couldn't install the Bedrock launcher:\n" + (r.stderr or r.stdout)[-600:])
+    if r.returncode != 0 or not flatpak_installed():
+        info = _run(["flatpak", "info", FLATPAK_ID])
+        raise BedrockError("Flatpak couldn't install the Minecraft Bedrock Launcher.\n\n"
+                           + ((r.stderr or r.stdout) + "\n" + (info.stderr or info.stdout)).strip()[-800:])
     status("Installed")
 
 
@@ -274,11 +281,26 @@ def open_launcher():
     elif kind == "mac":
         subprocess.Popen(["open", str(mac_app())], **opts)
     elif kind == "flatpak":
-        subprocess.Popen(["flatpak", "run", FLATPAK_ID], start_new_session=True, env=_clean_env(), **opts)
+        _start_and_check(["flatpak", "run", FLATPAK_ID])
     elif kind == "native":
-        subprocess.Popen([native_launcher()], start_new_session=True, env=_clean_env(), **opts)
+        _start_and_check([native_launcher()])
     else:
-        raise BedrockError("Install the Minecraft Bedrock Launcher first")
+        raise BedrockError("The Minecraft Bedrock Launcher isn't installed (or Jace Launcher can't see it). "
+                           "Click Install Bedrock launcher.")
+
+
+def _start_and_check(cmd: list[str]):
+    """Start a program and make sure it didn't exit straight away; if it did, show why."""
+    log = tempfile.TemporaryFile(mode="w+")
+    proc = subprocess.Popen(cmd, start_new_session=True, env=_clean_env(), stdin=subprocess.DEVNULL,
+                            stdout=log, stderr=subprocess.STDOUT, text=True)
+    try:
+        code = proc.wait(timeout=3)
+    except subprocess.TimeoutExpired:
+        return                                   # still running: it opened
+    log.seek(0)
+    raise BedrockError(f"The Minecraft Bedrock Launcher closed right away (exit code {code}):\n\n"
+                       + log.read().strip()[-800:])
 
 
 def _clean_env() -> dict:

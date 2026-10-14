@@ -35,7 +35,7 @@ rm -rf "$BUILD"
 # Qt >= 6.5 needs libxcb-cursor on X11 but many distros don't install it.
 # Put it next to Qt's own libs (their RUNPATH is $ORIGIN) so it's always found.
 QTLIB="$(find "$BUILD/dist/jace-launcher" -type d -path '*PySide6/Qt/lib' | head -1)"
-XCBC="$(ldconfig -p | awk '/libxcb-cursor.so.0 /{print $NF; exit}')"
+XCBC="$(ldconfig -p | awk '/libxcb-cursor.so.0 /{p=$NF} END{print p}')"   # (no early exit: SIGPIPE + pipefail)
 if [ -z "$XCBC" ] && [ -e .venv/syslibs/libxcb-cursor.so.0 ]; then XCBC=.venv/syslibs/libxcb-cursor.so.0; fi
 if [ -n "$XCBC" ]; then cp -L "$XCBC" "$QTLIB/libxcb-cursor.so.0"; else echo "warning: libxcb-cursor0 not bundled"; fi
 

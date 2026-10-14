@@ -109,6 +109,10 @@ def _clean_env() -> dict:
     """Environment for starting another copy of the app without PyInstaller's
     internal variables (otherwise the new copy thinks it's our child process)."""
     env = {k: v for k, v in os.environ.items() if not k.startswith(("_PYI", "_MEI"))}
+    # paths into *our* bundle: the new copy sets its own, and ours disappear when we quit
+    for k in ("QT_PLUGIN_PATH", "QML2_IMPORT_PATH", "QTWEBENGINEPROCESS_PATH", "QTWEBENGINE_RESOURCES_PATH",
+              "QTWEBENGINE_LOCALES_PATH", "LD_LIBRARY_PATH", "LD_LIBRARY_PATH_ORIG"):
+        env.pop(k, None)
     env["PYINSTALLER_RESET_ENVIRONMENT"] = "1"
     return env
 

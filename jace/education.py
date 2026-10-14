@@ -119,7 +119,16 @@ def running() -> bool:
 
 def _latest_tools_url() -> str:
     from jace.net import session
-    xml = session.get(REPO + "repository2-3.xml", timeout=30).text
+    xml = None
+    for attempt in range(4):                   # ride out a short network / DNS hiccup
+        try:
+            xml = session.get(REPO + "repository2-3.xml", timeout=30).text
+            break
+        except Exception:  # noqa: BLE001
+            if attempt == 3:
+                raise EducationError("Couldn't reach Google's download server (dl.google.com). Check your "
+                                     "internet connection and try again.")
+            time.sleep(3)
     m = re.search(r'<remotePackage path="cmdline-tools;latest">(.*?)</remotePackage>', xml, re.S)
     names = re.findall(r"<url>(commandlinetools-linux-[^<]+)</url>", m.group(1) if m else xml)
     if not names:

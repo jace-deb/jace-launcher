@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.8.1
+- **Bedrock:** "Install Bedrock launcher" now checks that the launcher actually got installed, and shows Flatpak's error if it didn't. Before, it could report success when nothing was installed.
+- **Bedrock:** if the Minecraft Bedrock Launcher closes right after "Download versions…", Jace Launcher now shows its error output instead of doing nothing.
+- **Bedrock:** Flatpak and mcpelauncher now run without Jace Launcher's bundled library paths, which could break them.
+- After an update, the restarted Jace Launcher no longer inherits Qt and library paths from the old copy.
+- **Education setup** now retries when Google's download server can't be reached (for example, a brief DNS failure) and shows a clear message if it still fails.
+- Added `--self-test-bedrock`, which writes Bedrock diagnostics to the file named in `JACE_SELF_TEST_OUT`.
+
 ## 1.8.0
 - **Minecraft Education now runs in Google's Android Emulator instead of Waydroid.** It's more reliable, and setup needs no password or system changes.
   - **Setup → Set up Android emulator** downloads everything into Jace Launcher's folder, about 2 GB: Google's Android Emulator, Android 14 with Google Play (Play Store certified), and a virtual tablet. You accept Google's Android SDK License first.

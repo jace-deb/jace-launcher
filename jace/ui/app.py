@@ -489,6 +489,27 @@ def self_test(app) -> int:
     return code
 
 
+def self_test_bedrock() -> int:
+    """Diagnostics: what the Bedrock / Education checks see from inside the packaged app."""
+    import os
+    import shutil as _sh
+    import subprocess as _sp
+    from jace import bedrock
+    lines = [f"LD_LIBRARY_PATH in our env: {os.environ.get('LD_LIBRARY_PATH')!r}",
+             f"flatpak on PATH: {_sh.which('flatpak')}"]
+    r = bedrock._run(["flatpak", "info", bedrock.FLATPAK_ID])
+    lines.append(f"flatpak info (clean env): exit {r.returncode} {(r.stderr or '').strip()[:300]}")
+    r2 = _sp.run(["flatpak", "info", bedrock.FLATPAK_ID], capture_output=True, text=True)
+    lines.append(f"flatpak info (our env): exit {r2.returncode} {(r2.stderr or '').strip()[:300]}")
+    lines.append(f"installed(): {bedrock.installed()} | versions: {[v['name'] for v in bedrock.installed_versions()]}")
+    out = os.environ.get("JACE_SELF_TEST_OUT")
+    if out:
+        with open(out, "w") as f:
+            f.write("\n".join(lines))
+    print("\n".join(lines))
+    return 0
+
+
 def self_test_login(app) -> int:
     """CI: run the setup wizard's "Add Microsoft account" exactly like a user would, with
     the Microsoft page sent straight to its success redirect and the token exchange
@@ -697,6 +718,8 @@ def main():
         sys.exit(self_test(app))
     if "--self-test-login" in argv:
         sys.exit(self_test_login(app))
+    if "--self-test-bedrock" in argv:
+        sys.exit(self_test_bedrock())
     if "--uninstall-gui" in argv:
         confirm_uninstall()
         return
