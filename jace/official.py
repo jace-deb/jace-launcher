@@ -69,6 +69,35 @@ if ($p) {{
         return None
 
 
+def win_education() -> dict | None:
+    """Microsoft's Minecraft Education installer (an MSI) in Programs and Features: {version, location, exe}."""
+    import winreg
+    keys = [(winreg.HKEY_LOCAL_MACHINE, r"Software\Microsoft\Windows\CurrentVersion\Uninstall"),
+            (winreg.HKEY_LOCAL_MACHINE, r"Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"),
+            (winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Uninstall")]
+    for hive, path in keys:
+        try:
+            root = winreg.OpenKey(hive, path)
+        except OSError:
+            continue
+        with root:
+            for i in range(winreg.QueryInfoKey(root)[0]):
+                try:
+                    with winreg.OpenKey(root, winreg.EnumKey(root, i)) as k:
+                        name = winreg.QueryValueEx(k, "DisplayName")[0]
+                        if name != "Minecraft Education":
+                            continue
+                        loc = Path(winreg.QueryValueEx(k, "InstallLocation")[0])
+                        version = winreg.QueryValueEx(k, "DisplayVersion")[0]
+                except OSError:
+                    continue
+                exes = [e for e in loc.glob("*.exe") if not re.search(r"unins|icon|crash|setup|update", e.name, re.I)]
+                if exes:
+                    exe = max(exes, key=lambda e: e.stat().st_size)      # the game, not a helper
+                    return {"version": version, "location": str(loc), "exe": str(exe)}
+    return None
+
+
 def mac_app() -> Path | None:
     try:                                         # where Jace Launcher installed it
         app = Path(json.loads(MAC_STATE.read_text())["app"])
@@ -85,7 +114,7 @@ def mac_app() -> Path | None:
 
 def installed(kind: str) -> bool:
     if IS_WIN:
-        return win_package(kind) is not None
+        return (kind == "education" and win_education() is not None) or win_package(kind) is not None
     if IS_MAC and kind == "education":
         return mac_app() is not None
     return False
@@ -141,7 +170,7 @@ def _wait_for_store_install(status, timeout=3600):
 
 
 def _education_windows(status):
-    pkg = win_package("education")
+    pkg = win_education() or win_package("education")
     try:
         url, latest = _latest(EDU_WIN_URL)
     except OfficialError:
@@ -158,10 +187,10 @@ def _education_windows(status):
             code = subprocess.run([str(exe), "/quiet", "/norestart"], timeout=1200, **_no_window()).returncode
         except subprocess.TimeoutExpired:
             code = "timed out"
-        if not win_package("education") and not os.environ.get("JACE_NO_INTERACTIVE"):
+        if not installed("education") and not os.environ.get("JACE_NO_INTERACTIVE"):
             status("Finish installing Minecraft Education in its installer window…")
             subprocess.run([str(exe)])           # the normal installer, if the quiet install didn't work
-    if not win_package("education"):
+    if not installed("education"):
         raise OfficialError(f"Minecraft Education didn't install (quiet installer: {code}).")
     status("Minecraft Education installed")
 
@@ -231,6 +260,8 @@ def launch_command(kind: str) -> list[str]:
         if not app:
             raise OfficialError("Minecraft Education isn't installed")
         return ["open", "-W", "-n", str(app)]
+    if kind == "education" and (edu := win_education()):
+        return [edu["exe"]]                      # Microsoft's installer: the game's own .exe
     pkg = win_package(kind)
     if not pkg:
         raise OfficialError(f"{NAMES[kind]} isn't installed")

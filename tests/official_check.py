@@ -17,7 +17,7 @@ assert ver, "no version in the download URL"
 
 if o.IS_WIN:
     print("bedrock package:", o.win_package("bedrock"))
-    print("education package:", o.win_package("education"))
+    print("education package:", o.win_package("education"), o.win_education())
     real = o.win_package
     o.win_package = lambda kind: {"name": "X", "version": "1.2.3.4", "location": "C:\\Program Files\\WindowsApps\\X",
                                   "aumid": "X_8wekyb3d8bbwe!App"}
@@ -55,7 +55,9 @@ if os.environ.get("FULL"):
 """, timeout=180))
         raise
     assert o.installed("education"), "Minecraft Education not found after installing"
-    print("installed:", o.win_package("education") if o.IS_WIN else o.mac_app())
+    print("installed:", (o.win_education() or o.win_package("education")) if o.IS_WIN else o.mac_app())
+    if o.IS_WIN and o.win_education():
+        print("files:", sorted(p.name for p in __import__("pathlib").Path(o.win_education()["location"]).iterdir()))
     print("launch:", o.launch_command("education")[:4])
     o.ensure("education", status)            # second time: already up to date, no download
 print("OFFICIAL OK")
