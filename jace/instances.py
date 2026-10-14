@@ -78,6 +78,14 @@ class Instance:
 
     # -- install & launch --
     def install(self, callback: dict, force=False):
+        if self.is_education and sys.platform != "linux":
+            from jace import official
+            official.ensure("education", callback.get("setStatus", print))
+            return
+        if self.is_bedrock and sys.platform == "win32":
+            from jace import official
+            official.ensure("bedrock", callback.get("setStatus", print))
+            return
         if self.is_education:
             from jace import education
             pkg = education.PACKAGES.get(self.mc_version, education.PACKAGES["Minecraft Education"])
@@ -110,6 +118,9 @@ class Instance:
         return False
 
     def build_command(self, account: dict, server: str | None = None) -> list[str]:
+        if (self.is_education and sys.platform != "linux") or (self.is_bedrock and sys.platform == "win32"):
+            from jace import official
+            return official.launch_command("education" if self.is_education else "bedrock")
         if self.is_education:
             from jace import education
             w, h = (int(self.data.get("window_width") or 0), int(self.data.get("window_height") or 0))
@@ -159,7 +170,7 @@ class Instance:
         self.data["last_played"] = time.time()
         self.save()
         kwargs = {}
-        if self.is_education:
+        if self.is_education and sys.platform == "linux":
             from jace.education import launch_env
             kwargs["env"] = launch_env()           # Android SDK / emulator settings
         elif not self.is_java:

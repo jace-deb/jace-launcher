@@ -256,9 +256,42 @@ def _adb(*args, timeout=30) -> subprocess.CompletedProcess:
     return _run([ADB, *args], timeout=timeout)
 
 
+def _host_ram_mb() -> int:
+    try:
+        return int(re.search(r"MemTotal:\s+(\d+)", Path("/proc/meminfo").read_text()).group(1)) // 1024
+    except (OSError, AttributeError):
+        return 8192
+
+
+def tune_avd():
+    """Size the virtual tablet for this PC: a big screen and lots of RAM on a small laptop means swapping
+    and slow video encoding (the main causes of lag). Rendering 1280x800 is about 4x less work than 2560x1600."""
+    cfg = AVD_HOME / f"{AVD}.avd" / "config.ini"
+    if not cfg.is_file():
+        return
+    cores, ram = os.cpu_count() or 4, _host_ram_mb()
+    big = cores >= 8 and ram >= 15000
+    want = {
+        "hw.cpu.ncore": str(max(2, min(8, cores - 2))),
+        "hw.ramSize": str(4096 if ram >= 15000 else 3072 if ram >= 11000 else 2560),
+        "hw.lcd.width": "1920" if big else "1280",
+        "hw.lcd.height": "1200" if big else "800",
+        "hw.lcd.density": "240" if big else "160",
+        "hw.gpu.enabled": "yes", "hw.gpu.mode": "host", "hw.keyboard": "yes",
+        "hw.initialOrientation": "landscape", "vm.heapSize": "256M",
+    }
+    lines = cfg.read_text().splitlines()
+    have = {ln.split("=", 1)[0].strip(): ln.split("=", 1)[1].strip() for ln in lines if "=" in ln}
+    if all(have.get(k) == v for k, v in want.items()):
+        return
+    lines = [ln for ln in lines if ln.split("=", 1)[0].strip() not in want] + [f"{k}={v}" for k, v in want.items()]
+    cfg.write_text("\n".join(lines) + "\n")
+
+
 def boot(status_cb=print):
     """Start Android in the background (no emulator window) and wait until it has booted."""
     if not running():
+        tune_avd()
         status_cb("Starting Android…")
         log = open(DATA_DIR / "android-emulator.log", "w")
         subprocess.Popen([str(EMULATOR), *EMULATOR_ARGS], start_new_session=True, env=_clean_env(),
@@ -273,6 +306,8 @@ def boot(status_cb=print):
     # no "isn't responding" / crash pop-ups, no "Viewing full screen" hint over the game
     _adb("shell", "settings", "put", "global", "hide_error_dialogs", "1")
     _adb("shell", "settings", "put", "secure", "immersive_mode_confirmations", "confirmed")
+    for anim in ("window_animation_scale", "transition_animation_scale", "animator_duration_scale"):
+        _adb("shell", "settings", "put", "global", anim, "0")
 
 
 def app_installed(package: str) -> bool:
@@ -284,7 +319,8 @@ def google_signed_in() -> bool:
 
 
 def _scrcpy(title: str, *args) -> list[str]:
-    return [str(SCRCPY), f"--window-title={title}", "--no-audio", "--stay-awake", "--disable-screensaver", *args]
+    return [str(SCRCPY), f"--window-title={title}", "--no-audio", "--stay-awake", "--disable-screensaver",
+            "--max-fps=60", "--video-bit-rate=12M", *args]
 
 
 def _scrcpy_env() -> dict:

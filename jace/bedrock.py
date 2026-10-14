@@ -192,7 +192,11 @@ _db_cache: dict[str, list[dict]] = {}
 
 def available_versions(include_beta: bool = False) -> list[dict]:
     """Every Bedrock version the Minecraft Bedrock Launcher can download for this CPU, newest first:
-    [{name, code, beta, installed}] (from mcpelauncher-versiondb), plus any already downloaded."""
+    [{name, code, beta, installed}] (from mcpelauncher-versiondb), plus any already downloaded.
+    On Windows: just the official game."""
+    if IS_WIN:
+        from jace import official
+        return [{"name": official.NAMES["bedrock"], "code": 0, "beta": False, "installed": official.installed("bedrock")}]
     arch = _arch()
     if arch not in _db_cache:
         try:
@@ -290,7 +294,7 @@ def _launcher_running(kind: str) -> bool:
 
 def com_mojang(root: Path | None = None) -> Path:
     """Bedrock's com.mojang folder (worlds, packs) inside a data folder (an instance's)."""
-    if root is not None:
+    if root is not None and not IS_WIN:          # Windows: the official game has one shared folder
         return Path(root) / "games" / "com.mojang"
     if IS_WIN:
         appdata = Path(os.environ.get("APPDATA", HOME / "AppData" / "Roaming"))
@@ -549,9 +553,6 @@ def import_file(path: str | Path, data: Path | None = None) -> list[str]:
     """Import a .mcpack / .mcaddon / .mcworld / .mctemplate (or a zip of one) into a data
     folder (an instance's). Returns what was added."""
     path = Path(path)
-    if IS_WIN and data is None:
-        os.startfile(str(path))                 # noqa: S606 - Minecraft imports it itself
-        return [f"Opened {path.name} with Minecraft"]
     try:
         zf = zipfile.ZipFile(path)
     except zipfile.BadZipFile as e:

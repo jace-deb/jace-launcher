@@ -54,6 +54,8 @@ jobs:
           pip install -r requirements.txt pyinstaller pillow "PySide6>=6.9,<6.10"
       - name: Test folder sync (junctions)
         run: python tests/sync_check.py
+      - name: Test the official Bedrock / Education app support
+        run: python tests/official_check.py
       - name: Build .exe
         run: python packaging/build.py
       - name: Test the Windows installer, update and uninstall
@@ -168,6 +170,8 @@ jobs:
           pip install -r requirements.txt pyinstaller pillow "PySide6>=6.9,<6.10"
       - name: Test folder sync
         run: python tests/sync_check.py
+      - name: Test the official Education app support
+        run: python tests/official_check.py
       - name: Build .app
         run: python packaging/build.py
       - name: Smoke test (start the packaged app headless)

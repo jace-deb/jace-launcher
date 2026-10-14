@@ -1,5 +1,6 @@
 """Library of instances, the new-instance dialog and the instance editor."""
 import shutil
+import sys
 from pathlib import Path
 
 from PySide6.QtCore import QSize, Qt, Signal
@@ -167,7 +168,7 @@ class NewInstanceDialog(QDialog):
         have = bedrock.installed()
         self.br_install.setVisible(not have)
         self.br_install.setEnabled(not why)
-        self.br_download.setVisible(bool(have))
+        self.br_download.setVisible(bool(have) and have != "windows")
         if why:
             self.info.setText(why)
             return
@@ -185,6 +186,11 @@ class NewInstanceDialog(QDialog):
             for v in vs:
                 self.version.addItem(v["name"] + ("  (beta)" if v["beta"] else "")
                                      + ("  (downloaded)" if v["installed"] else ""), v["name"])
+            if have == "windows":
+                self.info.setText("Plays the official Minecraft for Windows (Bedrock). If it isn't installed, Play "
+                                  "opens it in the Microsoft Store (it's bought with your Microsoft account). Worlds "
+                                  "and packs are the game's own, shared by every Bedrock instance.")
+                return
             self.info.setText("Each Bedrock instance has its own worlds and packs. The version downloads on the first "
                               "Play: the Minecraft Bedrock Launcher opens, click Download and play there (it needs "
                               "your Google Play account, which owns Minecraft).")
@@ -199,6 +205,11 @@ class NewInstanceDialog(QDialog):
         for name in education.PACKAGES:
             self.version.addItem(name, name)
         self.edu_setup.setVisible(False)
+        if not sys.platform.startswith("linux"):
+            self.info.setText("Plays Microsoft's official Minecraft Education app. Press Play: the first time Jace "
+                              "Launcher downloads and installs it from Microsoft (about 1 GB) and keeps it updated. "
+                              "Sign in with your school's Microsoft 365 Education account.")
+            return
         self.info.setText("Minecraft Education's Android app, running in Google's Android Emulator (in its own window "
                           "or full screen). Just press Play: the first time it downloads the emulator (about 2 GB, no "
                           "password) and installs Minecraft Education from Google Play. Sign in to the game with your "
@@ -747,7 +758,8 @@ class InstanceDialog(QDialog):
         tabs = QTabWidget()
         lay.addWidget(tabs)
         if inst.is_education:
-            tabs.addTab(EducationSetupTab(inst), "Setup")
+            if sys.platform.startswith("linux"):  # (Windows / macOS: the official app needs no setup)
+                tabs.addTab(EducationSetupTab(inst), "Setup")
         elif inst.is_bedrock:
             tabs.addTab(BedrockContentTab(inst, ["world"], self._browse(browse_cb)), "Worlds")
             tabs.addTab(BedrockContentTab(inst, ["behavior", "resource", "skin", "template"],
@@ -808,7 +820,7 @@ class InstanceDialog(QDialog):
         f.addRow("Window size", size_row)
         self.fullscreen = QCheckBox("Full screen")
         self.fullscreen.setChecked(bool(inst.data.get("fullscreen")))
-        if inst.is_education:
+        if inst.is_education and sys.platform.startswith("linux"):
             f.addRow("Display", self.fullscreen)
         self.mem = QSpinBox()
         self.mem.setRange(0, max(1024, total_ram_mb()))

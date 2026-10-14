@@ -149,6 +149,9 @@ class BedrockLoader:
 
     def game_versions(self, include_unstable=True):
         from jace import bedrock
+        if sys.platform == "win32":                # the official game: whatever the Store has installed
+            from jace.official import NAMES
+            return [NAMES["bedrock"]]
         return [v["name"] for v in bedrock.available_versions(include_beta=include_unstable)]
 
     def loader_versions(self, mc):
@@ -172,6 +175,8 @@ class EducationLoader:
     needs_loader_version = False
 
     def game_versions(self, include_unstable=True):
+        if not sys.platform.startswith("linux"):   # the official desktop app
+            return ["Minecraft Education"]
         from jace.education import PACKAGES
         return list(PACKAGES)
 
@@ -182,10 +187,8 @@ class EducationLoader:
         return ""
 
 
-if sys.platform != "win32":         # Windows has the real Bedrock (Microsoft Store), not mcpelauncher
-    LOADERS["bedrock"] = BedrockLoader()
-if sys.platform.startswith("linux"):   # Windows / macOS have Minecraft Education's own desktop app
-    LOADERS["education"] = EducationLoader()
+LOADERS["bedrock"] = BedrockLoader()        # Windows: the official game; Linux / macOS: mcpelauncher
+LOADERS["education"] = EducationLoader()    # Windows / macOS: the official app; Linux: in the Android Emulator
 
 # Names used by Modrinth / CurseForge for each loader
 MODRINTH_LOADER = {"fabric": "fabric", "quilt": "quilt", "forge": "forge",

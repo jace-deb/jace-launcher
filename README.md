@@ -32,12 +32,14 @@ A desktop launcher for Minecraft: Java Edition, written in Python and Qt (PySide
 - **Friends list**: add friends by Minecraft username and see their skin. Save the server they play on to see if they're online there, and click **Join** to launch straight into it. There's no Jace Launcher server, so "online" only works on servers that share their player list.
 - **Voice calls**: call a friend from their chat. In game, the Jace Social mod controls the call through the launcher. That only works when the game was started from Jace Launcher.
 - **Server add-ons**: one-click LuckPerms, WorldEdit, Chunky, spark and Ledger (an instance's **Mods** tab) for worlds you host with the Jace Social mod.
-- **Minecraft Bedrock instances** (Linux and macOS): pick **Bedrock** as the loader in New instance.
-  - They run through the [Minecraft Bedrock Launcher](https://minecraft-linux.github.io), which needs Minecraft owned on Google Play. It downloads the versions; Jace Launcher installs it for you.
+- **Minecraft Bedrock instances**: pick **Bedrock** as the loader in New instance.
+  - On **Windows** they play the official Minecraft for Windows. If it isn't installed, Play opens its Microsoft Store page.
+  - On **Linux and macOS**:
+    - They run through the [Minecraft Bedrock Launcher](https://minecraft-linux.github.io), which needs Minecraft owned on Google Play. It downloads the versions; Jace Launcher installs it for you.
   - Each instance has its own worlds and packs, and a version you can change.
   - Imports `.mcpack`, `.mcaddon`, `.mcworld` and `.mctemplate` files.
   - **Browse** shows Jace Store's Bedrock section for Bedrock instances.
-- **Minecraft Education instances** (Linux): the Android app in Google's Android Emulator (Android 14 with Google Play), shown in a plain window or full screen with [scrcpy](https://github.com/Genymobile/scrcpy). Just press Play: the first time, it downloads the emulator into Jace Launcher's folder (no password; you accept the Android SDK License) and installs Minecraft Education from Google Play. Google sign-in happens in a small window.
+- **Minecraft Education instances**: on **Windows and macOS**, Microsoft's official app, which Jace Launcher downloads, installs and keeps updated when you press Play. On **Linux**, the Android app in Google's Android Emulator (Android 14 with Google Play), shown in a plain window or full screen with [scrcpy](https://github.com/Genymobile/scrcpy). Just press Play: the first time, it downloads the emulator into Jace Launcher's folder (no password; you accept the Android SDK License) and installs Minecraft Education from Google Play. Google sign-in happens in a small window.
 - **Game log** window, plus per-instance memory, Java and JVM argument overrides.
 
 ## Running

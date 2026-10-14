@@ -1,0 +1,31 @@
+# Manual check: really install Minecraft Education from Microsoft on Windows and macOS
+# the way Jace Launcher does (silent installer / .dmg), then find and launch-prepare it.
+name: Official apps
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["test/**"]
+
+permissions:
+  contents: read
+
+jobs:
+  install:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - name: Install Minecraft Education like Jace Launcher does
+        env:
+          FULL: "1"
+          JACE_LAUNCHER_HOME: ${{ runner.temp }}/jace-home
+        run: python tests/official_check.py

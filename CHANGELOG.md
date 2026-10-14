@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.10.0
+- **Minecraft Bedrock on Windows.** Bedrock instances play the official Minecraft for Windows. If it isn't installed, Play opens its Microsoft Store page and continues once it's installed. Worlds and packs from Browse and the instance's tabs go into the game's own folder.
+- **Minecraft Education on Windows and macOS.** Education instances use Microsoft's official app. On Play, Jace Launcher downloads it from Microsoft, installs it (silently on Windows, into Applications on macOS) and keeps it updated.
+- **Minecraft Education on Linux runs much faster.** The virtual tablet is now sized for your PC:
+  - Its screen is 1280×800 (1920×1200 on PCs with 8+ CPU threads and 16 GB+ RAM).
+  - Its RAM and CPU cores fit what you have, so your PC no longer swaps.
+  - Android's animations are off.
+  - On a 6-thread, 8 GB laptop it went from about 10 to about 48 FPS.
+
 ## 1.9.0
 - **Minecraft Education no longer shows a black screen.** Android now draws with ANGLE on your GPU's Vulkan (the emulator's GuestAngle mode). The emulator's default OpenGL ES 3.0 couldn't run the game's renderer.
 - **Just press Play.** The first time, Jace Launcher sets up the Android emulator (you accept the Android SDK License), then installs Minecraft Education from Google Play by itself. You no longer need the Setup tab.

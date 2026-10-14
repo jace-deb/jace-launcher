@@ -413,7 +413,7 @@ class MainWindow(QMainWindow):
             self.go(3)
             return
 
-        if inst.is_education:                    # first Play: set up the Android emulator
+        if inst.is_education and sys.platform == "linux":   # first Play: set up the Android emulator
             from jace import education
             from jace.ui.instances_page import accept_android_license
             if not education.kvm_ok():
