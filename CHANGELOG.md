@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.9.0
+- **Minecraft Education no longer shows a black screen.** Android now draws with ANGLE on your GPU's Vulkan (the emulator's GuestAngle mode). The emulator's default OpenGL ES 3.0 couldn't run the game's renderer.
+- **Just press Play.** The first time, Jace Launcher sets up the Android emulator (you accept the Android SDK License), then installs Minecraft Education from Google Play by itself. You no longer need the Setup tab.
+- **Google sign-in gets its own small window.** If Android isn't signed in to Google yet, Google Play opens on the Minecraft Education page in a small window. Once you're signed in, Jace Launcher presses Install for you.
+- **New game window.** The emulator runs without its own window, and the game appears in a clean [scrcpy](https://github.com/Genymobile/scrcpy) window:
+  - no emulator toolbar
+  - no "not responding" prompts while Android starts
+  - Android's "isn't responding" and "Viewing full screen" pop-ups are turned off
+- **Real full screen.** There's no bar and no black screen, and Gamescope isn't needed anymore.
+- In the game, the keyboard and mouse act like real ones plugged into the tablet. Press **Left Alt** to free the mouse.
+
 ## 1.8.2
 - **Bedrock instances list every Bedrock version, and the one you pick downloads when you press Play**, like Java versions.
   - The list comes from the Minecraft Bedrock Launcher's version database (about 130 releases for your CPU). Tick **Snapshots** when creating an instance to include betas.

@@ -80,9 +80,8 @@ class Instance:
     def install(self, callback: dict, force=False):
         if self.is_education:
             from jace import education
-            why = education.problem(bool(self.data.get("fullscreen")))
-            if why:
-                raise education.EducationError(why)
+            pkg = education.PACKAGES.get(self.mc_version, education.PACKAGES["Minecraft Education"])
+            education.prepare(pkg, callback.get("setStatus", print))
             return
         if self.is_bedrock:
             from jace import bedrock

@@ -37,7 +37,7 @@ A desktop launcher for Minecraft: Java Edition, written in Python and Qt (PySide
   - Each instance has its own worlds and packs, and a version you can change.
   - Imports `.mcpack`, `.mcaddon`, `.mcworld` and `.mctemplate` files.
   - **Browse** shows Jace Store's Bedrock section for Bedrock instances.
-- **Minecraft Education instances** (Linux): the Android app in Google's Android Emulator (Android 14 with Google Play), in its own window or full screen with Gamescope. The instance's Setup tab downloads the emulator into Jace Launcher's folder (no password; you accept the Android SDK License) and gets the app from Google Play or an APK.
+- **Minecraft Education instances** (Linux): the Android app in Google's Android Emulator (Android 14 with Google Play), shown in a plain window or full screen with [scrcpy](https://github.com/Genymobile/scrcpy). Just press Play: the first time, it downloads the emulator into Jace Launcher's folder (no password; you accept the Android SDK License) and installs Minecraft Education from Google Play. Google sign-in happens in a small window.
 - **Game log** window, plus per-instance memory, Java and JVM argument overrides.
 
 ## Running

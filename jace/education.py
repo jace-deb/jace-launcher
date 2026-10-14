@@ -5,7 +5,10 @@ SDK) with a "Google Play" system image, so the Play Store works and is certified
 Everything lives in Jace Launcher's data folder: no root, no password. It needs KVM
 (/dev/kvm), which most Linux desktops allow for the logged-in user.
 
-Windowed play is the emulator's own window; full screen runs it inside Gamescope (-f).
+The emulator runs without a window of its own (no toolbar, no "not responding" prompts while
+Android boots); scrcpy shows Android's screen in a plain window, or full screen. Android draws
+with ANGLE on the host's Vulkan (the emulator's GuestAngle feature): with the default OpenGL ES
+3.0 translator Minecraft Education's renderer shows only a black screen.
 Using the SDK means accepting Google's Android SDK License - the user does that in the
 Setup tab before anything is downloaded.
 
@@ -42,9 +45,21 @@ AVDMANAGER = SDK / "cmdline-tools" / "latest" / "bin" / "avdmanager"
 EMULATOR = SDK / "emulator" / "emulator"
 ADB = SDK / "platform-tools" / "adb"
 
+# scrcpy (Apache-2.0) shows the emulator's screen: github.com/Genymobile/scrcpy
+SCRCPY_VERSION = "5.0.1"
+SCRCPY_URL = (f"https://github.com/Genymobile/scrcpy/releases/download/v{SCRCPY_VERSION}/"
+              f"scrcpy-linux-x86_64-v{SCRCPY_VERSION}.tar.gz")
+SCRCPY_SHA256 = "9f969d30cc574816077edecda65719c1c70b0aee1df1ba5fa00779ac07b8fd6e"
+SCRCPY_DIR = DATA_DIR / "scrcpy"
+SCRCPY = SCRCPY_DIR / "scrcpy"
+EMULATOR_ARGS = ["-avd", AVD, "-no-window", "-gpu", "host", "-feature", "GuestAngle", "-no-boot-anim"]
+
 
 class EducationError(Exception):
     pass
+
+
+license_accepted = False        # set by the UI once the user accepted the Android SDK License
 
 
 def _clean_env() -> dict:
@@ -92,22 +107,24 @@ def status() -> dict:
         "emulator": EMULATOR.is_file() and ADB.is_file(),
         "image": image.is_file(),
         "device": (AVD_HOME / f"{AVD}.avd").is_dir(),
-        "gamescope": bool(shutil.which("gamescope")),
+        "scrcpy": SCRCPY.is_file(),
     }
 
 
-def problem(fullscreen=False) -> str | None:
+def set_up() -> bool:
+    s = status()
+    return all(s[k] for k in ("tools", "emulator", "image", "device"))
+
+
+def problem(fullscreen=False) -> str | None:   # (fullscreen: kept for callers; scrcpy needs nothing extra)
     """Why Education can't start yet, in plain words (None = ready)."""
     s = status()
     if not s["kvm"]:
         return ("The Android emulator needs KVM (hardware virtualization). Turn on virtualization (VT-x / AMD-V) "
                 "in your BIOS, and make sure /dev/kvm is usable (on most distros: sudo usermod -aG kvm $USER, "
                 "then log out and back in).")
-    if not (s["tools"] and s["emulator"] and s["image"] and s["device"]):
-        return "The Android emulator isn't set up yet. Open the instance → Setup → Set up Android emulator."
-    if fullscreen and not s["gamescope"]:
-        return "Full screen needs Gamescope (install it with your package manager, e.g. sudo pacman -S gamescope), " \
-               "or turn off Full screen."
+    if not set_up():
+        return "The Android emulator isn't set up yet. Press Play (or Setup → Set up Android emulator)."
     return None
 
 
@@ -201,7 +218,28 @@ def setup(status_cb=print, license_accepted=False):
     lines += ["hw.keyboard=yes", "hw.gpu.enabled=yes", "hw.gpu.mode=auto", "hw.ramSize=4096",
               "disk.dataPartition.size=8G", "hw.initialOrientation=landscape"]
     cfg.write_text("\n".join(lines) + "\n")
-    status_cb("Ready! Open Google Play, sign in and install Minecraft Education.")
+    ensure_scrcpy(status_cb)
+    status_cb("Ready! Press Play: Minecraft Education installs from Google Play the first time.")
+
+
+def ensure_scrcpy(status_cb=print):
+    """Download scrcpy (the window that shows Android) if it isn't here yet."""
+    if SCRCPY.is_file():
+        return
+    import hashlib
+    import tarfile
+    status_cb("Downloading scrcpy (the game window)…")
+    with tempfile.TemporaryDirectory() as tmp:
+        tgz = Path(tmp) / "scrcpy.tar.gz"
+        download(SCRCPY_URL, tgz)
+        if hashlib.sha256(tgz.read_bytes()).hexdigest() != SCRCPY_SHA256:
+            raise EducationError("The scrcpy download was corrupted. Try again.")
+        with tarfile.open(tgz) as tf:
+            tf.extractall(tmp, filter="data")
+        src = next(Path(tmp).glob("scrcpy-linux-*"))
+        shutil.rmtree(SCRCPY_DIR, ignore_errors=True)
+        shutil.move(str(src), str(SCRCPY_DIR))
+    SCRCPY.chmod(0o755)
 
 
 def remove_all():
@@ -214,37 +252,122 @@ def remove_all():
 
 # --- launching ---------------------------------------------------------------------------
 
-def _boot_and_open(package: str | None, headless=False) -> str:
-    """Shell script: start the emulator, wait for Android, open package; ends when the window closes."""
-    emu = f'"{EMULATOR}" -avd {AVD} -gpu auto -no-boot-anim -no-audio' if headless else \
-          f'"{EMULATOR}" -avd {AVD} -gpu auto -no-boot-anim'
-    if headless:
-        emu += " -no-window"
-    script = (f"{emu} & e=$!; "
-              f'"{ADB}" wait-for-device; '
-              f'for i in $(seq 1 150); do [ "$("{ADB}" shell getprop sys.boot_completed 2>/dev/null | tr -d "\\r")" = 1 ] && break; sleep 2; done; ')
-    if package:
-        script += f'"{ADB}" shell monkey -p {package} -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1; '
-    return script + "wait $e"
+def _adb(*args, timeout=30) -> subprocess.CompletedProcess:
+    return _run([ADB, *args], timeout=timeout)
+
+
+def boot(status_cb=print):
+    """Start Android in the background (no emulator window) and wait until it has booted."""
+    if not running():
+        status_cb("Starting Android…")
+        log = open(DATA_DIR / "android-emulator.log", "w")
+        subprocess.Popen([str(EMULATOR), *EMULATOR_ARGS], start_new_session=True, env=_clean_env(),
+                         stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT)
+    end = time.time() + 300
+    _adb("wait-for-device", timeout=300)
+    while _adb("shell", "getprop", "sys.boot_completed", timeout=10).stdout.strip() != "1":
+        if time.time() > end:
+            raise EducationError("Android didn't start in time. Try again (details: android-emulator.log in "
+                                 "Jace Launcher's folder).")
+        time.sleep(2)
+    # no "isn't responding" / crash pop-ups, no "Viewing full screen" hint over the game
+    _adb("shell", "settings", "put", "global", "hide_error_dialogs", "1")
+    _adb("shell", "settings", "put", "secure", "immersive_mode_confirmations", "confirmed")
+
+
+def app_installed(package: str) -> bool:
+    return f"package:{package}" in _adb("shell", "pm", "list", "packages", package).stdout.split()
+
+
+def google_signed_in() -> bool:
+    return "type=com.google" in _adb("shell", "dumpsys", "account").stdout
+
+
+def _scrcpy(title: str, *args) -> list[str]:
+    return [str(SCRCPY), f"--window-title={title}", "--no-audio", "--stay-awake", "--disable-screensaver", *args]
+
+
+def _scrcpy_env() -> dict:
+    return {**_clean_env(), "ADB": str(ADB), "SCRCPY_SERVER_PATH": str(SCRCPY_DIR / "scrcpy-server")}
+
+
+def _tap_install() -> bool:
+    """Press Google Play's main Install button if it's on screen (the user is already signed in).
+    The page can also list "Available on more devices" with Install buttons for *other* devices
+    further down, so only the topmost one is ever pressed."""
+    _adb("shell", "uiautomator", "dump", "/sdcard/jace-ui.xml", timeout=30)
+    xml = _adb("shell", "cat", "/sdcard/jace-ui.xml", timeout=20).stdout
+    if re.search(r'(?:text|content-desc)="(?:Open|Uninstall|Installing|Pending|Cancel)"', xml):
+        return False                               # already installing / installed
+    found = [tuple(map(int, m.groups())) for m in re.finditer(
+        r'<node [^>]*?(?:text|content-desc)="Install"[^>]*?bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"', xml)]
+    if not found:
+        return False
+    x1, y1, x2, y2 = min(found, key=lambda b: b[1])
+    _adb("shell", "input", "tap", str((x1 + x2) // 2), str((y1 + y2) // 2))
+    return True
+
+
+def ensure_app(package: str, status_cb=print, timeout: float = 1800):
+    """Install Minecraft Education from Google Play if it isn't installed: Play opens on its page in a
+    small window (sign in to Google there the first time) and Install is pressed for you."""
+    if app_installed(package):
+        return
+    ensure_scrcpy(status_cb)
+    _adb("shell", "am", "start", "-a", "android.intent.action.VIEW", "-d", f"market://details?id={package}",
+         PLAY_STORE)
+    win = subprocess.Popen(_scrcpy("Google Play - Minecraft Education", "--window-width=960", "--window-height=600"),
+                           start_new_session=True, env=_scrcpy_env(), stdin=subprocess.DEVNULL,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    try:
+        end, tapped = time.time() + timeout, False
+        while time.time() < end:
+            if app_installed(package):
+                status_cb("Minecraft Education installed")
+                time.sleep(3)                      # let Play finish
+                return
+            if win.poll() is not None:
+                raise EducationError("The Google Play window was closed before Minecraft Education was installed. "
+                                     "Press Play to try again.")
+            if not google_signed_in():
+                status_cb("Sign in to Google in the Google Play window…")
+            else:
+                status_cb("Installing Minecraft Education from Google Play…")
+                if not tapped:
+                    tapped = _tap_install()
+            time.sleep(3)
+        raise EducationError("Timed out waiting for Minecraft Education to install")
+    finally:
+        if win.poll() is None:
+            win.terminate()
+
+
+def prepare(package: str, status_cb=print, license_accepted=False):
+    """Everything Play needs: the emulator (set up on first use), Android running, the app installed."""
+    if not kvm_ok():
+        raise EducationError(problem())
+    if not set_up():
+        setup(status_cb, license_accepted=license_accepted or globals()["license_accepted"])
+    ensure_scrcpy(status_cb)
+    boot(status_cb)
+    ensure_app(package, status_cb)
 
 
 def launch_command(package: str, fullscreen: bool = False, width: int = 0, height: int = 0) -> list[str]:
-    """The emulator (in full-screen Gamescope if asked), opening <package>."""
-    why = problem(fullscreen)
+    """scrcpy showing Android with <package> started (call prepare() first). Closing it ends the session."""
+    why = problem()
     if why:
         raise EducationError(why)
-    cmd = ["sh", "-c", _boot_and_open(package)]
+    args = [f"--start-app={package}", "--keyboard=uhid", "--mouse=uhid"]
     if fullscreen:
-        args = ["gamescope", "-f"]
-        if width > 0 and height > 0:
-            args += ["-W", str(width), "-H", str(height)]
-        # inside Gamescope the emulator (a Qt app) draws through Gamescope's X server
-        return [*args, "--", "env", "QT_QPA_PLATFORM=xcb", *cmd]
-    return cmd
+        args.append("--fullscreen")
+    elif width > 0 and height > 0:
+        args += [f"--window-width={width}", f"--window-height={height}"]
+    return _scrcpy("Minecraft Education", *args)
 
 
 def launch_env() -> dict:
-    return _clean_env()
+    return _scrcpy_env()
 
 
 def install_apk(path: str | Path, status_cb=print):
@@ -252,26 +375,24 @@ def install_apk(path: str | Path, status_cb=print):
     why = problem()
     if why:
         raise EducationError(why)
-    started = False
-    if not running():
-        status_cb("Starting Android in the background…")
-        subprocess.Popen(["sh", "-c", _boot_and_open(None, headless=True)], start_new_session=True,
-                         env=_clean_env(), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                         stderr=subprocess.DEVNULL)
-        started = True
-        end = time.time() + 300
-        while time.time() < end:
-            if _run([ADB, "shell", "getprop", "sys.boot_completed"], timeout=10).stdout.strip() == "1":
-                break
-            time.sleep(3)
-        else:
-            raise EducationError("Android didn't start in time. Try again.")
+    started = not running()
+    boot(status_cb)
     status_cb("Installing the app…")
     r = _run([ADB, "install", "-r", str(path)], timeout=600)
     if started:
-        _run([ADB, "emu", "kill"])
+        _adb("emu", "kill")
     if r.returncode != 0 or "Success" not in r.stdout:
         raise EducationError("Couldn't install it:\n" + (r.stderr or r.stdout)[-400:])
+
+
+def open_play_store(status_cb=print):
+    """Google Play in a small window, e.g. to sign in or update apps."""
+    ensure_scrcpy(status_cb)
+    boot(status_cb)
+    _adb("shell", "monkey", "-p", PLAY_STORE, "-c", "android.intent.category.LAUNCHER", "1")
+    return subprocess.Popen(_scrcpy("Google Play", "--window-width=960", "--window-height=600"),
+                            start_new_session=True, env=_scrcpy_env(), stdin=subprocess.DEVNULL,
+                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
 def stop_session():

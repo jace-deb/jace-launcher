@@ -1,6 +1,5 @@
 """Library of instances, the new-instance dialog and the instance editor."""
 import shutil
-import subprocess
 from pathlib import Path
 
 from PySide6.QtCore import QSize, Qt, Signal
@@ -51,6 +50,7 @@ def run_android_setup(parent, status_cb, done_cb):
         return
     if not accept_android_license(parent):
         return
+    education.license_accepted = True
     run_task(lambda callback: education.setup(callback["setStatus"], license_accepted=True), use_callback=True,
              on_status=status_cb, on_done=lambda _: done_cb(), on_error=lambda m: (status_cb(""), show_error(parent, m)))
 
@@ -198,12 +198,11 @@ class NewInstanceDialog(QDialog):
         self.version.clear()
         for name in education.PACKAGES:
             self.version.addItem(name, name)
-        ready = education.problem() is None
-        self.edu_setup.setVisible(not ready)
-        self.info.setText("Minecraft Education's Android app, running in Google's Android Emulator (its own window, or "
-                          "full screen with Gamescope). Sign in with your school's Microsoft 365 Education account. "
-                          + ("" if ready else "First, a one-time setup downloads the emulator (about 2 GB, no "
-                                              "password): click Set up Android emulator."))
+        self.edu_setup.setVisible(False)
+        self.info.setText("Minecraft Education's Android app, running in Google's Android Emulator (in its own window "
+                          "or full screen). Just press Play: the first time it downloads the emulator (about 2 GB, no "
+                          "password) and installs Minecraft Education from Google Play. Sign in to the game with your "
+                          "school's Microsoft 365 Education account.")
 
     def _load_versions(self):
         lid = self._lid()
@@ -646,9 +645,11 @@ class EducationSetupTab(QWidget):
         self.inst, self.education = inst, education
         lay = QVBoxLayout(self)
         intro = QLabel("Minecraft Education runs as its Android app in Google's <b>Android Emulator</b> (Android 14 "
-                       "with Google Play), in its own window or full screen with <b>Gamescope</b> "
-                       "(Settings → Full screen). Sign in inside the app with your school's Microsoft 365 Education "
-                       "account.")
+                       "with Google Play), shown in its own window or full screen (Settings → Full screen). "
+                       "Just press <b>Play</b>: the first time it sets up the emulator and installs Minecraft "
+                       "Education from Google Play (sign in to Google in the small window that opens). "
+                       "Sign in inside the game with your school's Microsoft 365 Education account. "
+                       "In the game, <b>Left Alt</b> frees the mouse.")
         intro.setWordWrap(True)
         lay.addWidget(intro)
         self.checks = QLabel()
@@ -659,7 +660,7 @@ class EducationSetupTab(QWidget):
         self.setup_btn.setObjectName("primary")
         self.setup_btn.clicked.connect(self._setup)
         play = QPushButton("Open Google Play")
-        play.setToolTip("Opens Android's Play Store: sign in and install Minecraft Education")
+        play.setToolTip("Opens Google Play in a small window (to sign in or update apps)")
         play.clicked.connect(self._play_store)
         apk = QPushButton("Install APK…")
         apk.clicked.connect(self._apk)
@@ -691,7 +692,7 @@ class EducationSetupTab(QWidget):
             line(s["tools"] and s["emulator"], "Android Emulator downloaded"),
             line(s["image"], "Android 14 with Google Play downloaded"),
             line(s["device"], "Virtual tablet created"),
-            line(s["gamescope"], "Gamescope installed (only needed for Full screen)"),
+            line(s["scrcpy"], "Game window (scrcpy) downloaded"),
         ]))
         ready = all(s[k] for k in ("tools", "emulator", "image", "device"))
         self.setup_btn.setText("Repair emulator" if ready else "Set up Android emulator")
@@ -702,19 +703,18 @@ class EducationSetupTab(QWidget):
         def done():
             self.setup_btn.setEnabled(True)
             self.refresh()
-            self.note.setText("Ready! Click Open Google Play, sign in, and install Minecraft Education.")
+            self.note.setText("Ready! Press Play: Minecraft Education installs from Google Play the first time.")
         run_android_setup(self, self.note.setText, done)
         self.setup_btn.setEnabled(True)
 
     def _play_store(self):
-        try:
-            cmd = self.education.launch_command(self.education.PLAY_STORE)
-            subprocess.Popen(cmd, start_new_session=True, env=self.education.launch_env(),
-                             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            self.note.setText("Android is starting (the first boot takes a minute or two). Sign in to Google Play, "
-                              "search for Minecraft Education and install it, then close the emulator and press Play.")
-        except (OSError, self.education.EducationError) as e:
-            show_error(self, str(e))
+        if self.education.problem():
+            show_error(self, self.education.problem())
+            return
+        run_task(lambda callback: self.education.open_play_store(callback["setStatus"]), use_callback=True,
+                 on_status=self.note.setText,
+                 on_done=lambda _: self.note.setText("Google Play is open in its own window."),
+                 on_error=lambda m: (self.note.setText(""), show_error(self, m)))
 
     def _apk(self):
         path, _ = QFileDialog.getOpenFileName(self, "Minecraft Education APK", "", "Android apps (*.apk)")
@@ -806,7 +806,7 @@ class InstanceDialog(QDialog):
             size_row.addWidget(b)
         size_row.addStretch()
         f.addRow("Window size", size_row)
-        self.fullscreen = QCheckBox("Full screen (opens in Gamescope)")
+        self.fullscreen = QCheckBox("Full screen")
         self.fullscreen.setChecked(bool(inst.data.get("fullscreen")))
         if inst.is_education:
             f.addRow("Display", self.fullscreen)

@@ -413,6 +413,17 @@ class MainWindow(QMainWindow):
             self.go(3)
             return
 
+        if inst.is_education:                    # first Play: set up the Android emulator
+            from jace import education
+            from jace.ui.instances_page import accept_android_license
+            if not education.kvm_ok():
+                QMessageBox.warning(self, "Minecraft Education", education.problem())
+                return
+            if not education.set_up() and not education.license_accepted:
+                if not accept_android_license(self):
+                    return
+                education.license_accepted = True
+
         def prepare(callback):
             account = accounts.ensure_fresh(acc) if acc and inst.is_java else (acc or {})
             inst.install(callback)
