@@ -167,7 +167,7 @@ LOADERS = {
     "legacyfabric": FabricLike("legacyfabric", "Legacy Fabric", "https://meta.legacyfabric.net/v2"),
 }
 class EducationLoader:
-    """Minecraft Education's Android app in Waydroid (Linux). "Versions" are the app and its Preview."""
+    """Minecraft Education's Android app in the Android Emulator (Linux). "Versions" are the app and its Preview."""
     id, name = "education", "Education"
     needs_loader_version = False
 

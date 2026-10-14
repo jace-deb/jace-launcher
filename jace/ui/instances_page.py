@@ -27,6 +27,34 @@ def sort_versions(versions: list[str]) -> list[str]:
     return sorted(set(versions), key=lambda v: order.get(v, 10 ** 6))
 
 
+def accept_android_license(parent) -> bool:
+    """Google's Android SDK License must be accepted (by the user) before downloading the emulator."""
+    from jace import education
+    box = QMessageBox(parent)
+    box.setWindowTitle("Android SDK License")
+    box.setTextFormat(Qt.TextFormat.RichText)
+    box.setText("Minecraft Education runs in Google's <b>Android Emulator</b>. Setting it up downloads Google's "
+                f"Android SDK tools, the emulator and Android 14 with Google Play (about {education.DOWNLOAD_MB // 1000} GB, "
+                "into Jace Launcher's folder; no password needed).<br><br>To use them you must accept the "
+                f"<a href='{education.LICENSE_URL}'>Android Software Development Kit License Agreement</a>.")
+    box.setTextInteractionFlags(Qt.TextInteractionFlag.TextBrowserInteraction)
+    accept = box.addButton("I accept, download", QMessageBox.ButtonRole.AcceptRole)
+    box.addButton("Cancel", QMessageBox.ButtonRole.RejectRole)
+    box.exec()
+    return box.clickedButton() is accept
+
+
+def run_android_setup(parent, status_cb, done_cb):
+    from jace import education
+    if not education.kvm_ok():
+        show_error(parent, education.problem())
+        return
+    if not accept_android_license(parent):
+        return
+    run_task(lambda callback: education.setup(callback["setStatus"], license_accepted=True), use_callback=True,
+             on_status=status_cb, on_done=lambda _: done_cb(), on_error=lambda m: (status_cb(""), show_error(parent, m)))
+
+
 class NewInstanceDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -68,9 +96,9 @@ class NewInstanceDialog(QDialog):
         self.br_download.clicked.connect(self._open_bedrock_launcher)
         self.br_refresh = QPushButton("Refresh")
         self.br_refresh.clicked.connect(self._load_versions)
-        self.edu_setup = QPushButton("Set up Waydroid")
+        self.edu_setup = QPushButton("Set up Android emulator")
         self.edu_setup.setObjectName("primary")
-        self.edu_setup.clicked.connect(self._setup_waydroid)
+        self.edu_setup.clicked.connect(self._setup_emulator)
         self.edu_setup.hide()
         for b in (self.br_install, self.br_download, self.edu_setup, self.br_refresh):
             brow.addWidget(b)
@@ -100,14 +128,14 @@ class NewInstanceDialog(QDialog):
             w.setVisible(not on)
         self.loader_version.setVisible(not on)
 
-    def _setup_waydroid(self):
-        from jace import education
-        try:
-            education.open_setup_terminal()
-        except (OSError, education.EducationError) as e:
-            show_error(self, str(e))
-            return
-        self.info.setText("Finish the setup in the terminal window (it asks for your password), then click Refresh.")
+    def _setup_emulator(self):
+        self.edu_setup.setEnabled(False)
+
+        def done():
+            self.edu_setup.setEnabled(True)
+            self._load_versions()
+        run_android_setup(self, self.info.setText, done)
+        self.edu_setup.setEnabled(True)
 
     def _install_bedrock(self):
         from jace import bedrock
@@ -120,7 +148,8 @@ class NewInstanceDialog(QDialog):
         def fail(m):
             self.br_install.setEnabled(True)
             show_error(self, m)
-        run_task(bedrock.install, on_done=done, on_error=fail, on_status=self.info.setText)
+        run_task(lambda callback: bedrock.install(callback["setStatus"]), use_callback=True,
+                 on_done=done, on_error=fail, on_status=self.info.setText)
 
     def _open_bedrock_launcher(self):
         from jace import bedrock
@@ -165,10 +194,10 @@ class NewInstanceDialog(QDialog):
             self.version.addItem(name, name)
         ready = education.problem() is None
         self.edu_setup.setVisible(not ready)
-        self.info.setText("Minecraft Education's Android app, running in Waydroid (shown in a Cage window, or full "
-                          "screen with Gamescope). Sign in with your school's Microsoft 365 Education account. "
-                          + ("" if ready else "Waydroid needs a one-time setup: click Set up Waydroid "
-                                              "(it asks for your password in a terminal)."))
+        self.info.setText("Minecraft Education's Android app, running in Google's Android Emulator (its own window, or "
+                          "full screen with Gamescope). Sign in with your school's Microsoft 365 Education account. "
+                          + ("" if ready else "First, a one-time setup downloads the emulator (about 2 GB, no "
+                                              "password): click Set up Android emulator."))
 
     def _load_versions(self):
         lid = self._lid()
@@ -603,37 +632,41 @@ class BedrockContentTab(QWidget):
 
 
 class EducationSetupTab(QWidget):
-    """What Minecraft Education needs (Waydroid, Cage, Gamescope) and getting the app."""
+    """What Minecraft Education needs (the Android emulator) and getting the app."""
 
     def __init__(self, inst: Instance):
         super().__init__()
         from jace import education
         self.inst, self.education = inst, education
         lay = QVBoxLayout(self)
-        intro = QLabel("Minecraft Education runs as its Android app in <b>Waydroid</b>, shown in a <b>Cage</b> window, "
-                       "or full screen inside <b>Gamescope</b> (Settings → Full screen). Sign in inside the app "
-                       "with your school's Microsoft 365 Education account.")
+        intro = QLabel("Minecraft Education runs as its Android app in Google's <b>Android Emulator</b> (Android 14 "
+                       "with Google Play), in its own window or full screen with <b>Gamescope</b> "
+                       "(Settings → Full screen). Sign in inside the app with your school's Microsoft 365 Education "
+                       "account.")
         intro.setWordWrap(True)
         lay.addWidget(intro)
         self.checks = QLabel()
         self.checks.setTextFormat(Qt.TextFormat.RichText)
         lay.addWidget(self.checks)
         row = QHBoxLayout()
-        setup = QPushButton("Set up Waydroid")
-        setup.setObjectName("primary")
-        setup.setToolTip("Opens a terminal that installs Waydroid, Cage and Gamescope and downloads Android "
-                         "with Google Play. You type your password there.")
-        setup.clicked.connect(self._setup)
+        self.setup_btn = QPushButton("Set up Android emulator")
+        self.setup_btn.setObjectName("primary")
+        self.setup_btn.clicked.connect(self._setup)
         play = QPushButton("Open Google Play")
-        play.setToolTip("Opens Android's Play Store in a Cage window: sign in and install Minecraft Education")
+        play.setToolTip("Opens Android's Play Store: sign in and install Minecraft Education")
         play.clicked.connect(self._play_store)
         apk = QPushButton("Install APK…")
         apk.clicked.connect(self._apk)
+        rm = QPushButton("Remove emulator")
+        rm.setObjectName("danger")
+        rm.setToolTip("Deletes the emulator and Android (frees several GB). Minecraft Education's data inside it is lost.")
+        rm.clicked.connect(self._remove)
         ref = QPushButton("Refresh")
         ref.clicked.connect(self.refresh)
-        for b in (setup, play, apk, ref):
+        for b in (self.setup_btn, play, apk, ref):
             row.addWidget(b)
         row.addStretch()
+        row.addWidget(rm)
         lay.addLayout(row)
         self.note = QLabel("")
         self.note.setObjectName("muted")
@@ -644,30 +677,36 @@ class EducationSetupTab(QWidget):
 
     def refresh(self):
         s = self.education.status()
+
         def line(ok, text):
             return f"<span style='color:{'#3ddc84' if ok else '#e0605a'}'>{'✓' if ok else '✗'}</span> {text}"
         self.checks.setText("<br>".join([
-            line(s["waydroid"], "Waydroid installed"),
-            line(s["initialized"], "Android downloaded (waydroid init)"),
-            line(s["container"], "Waydroid service running"),
-            line(s["cage"], "Cage installed (the game window)"),
+            line(s["kvm"], "Hardware virtualization (KVM) available"),
+            line(s["tools"] and s["emulator"], "Android Emulator downloaded"),
+            line(s["image"], "Android 14 with Google Play downloaded"),
+            line(s["device"], "Virtual tablet created"),
             line(s["gamescope"], "Gamescope installed (only needed for Full screen)"),
         ]))
+        ready = all(s[k] for k in ("tools", "emulator", "image", "device"))
+        self.setup_btn.setText("Repair emulator" if ready else "Set up Android emulator")
 
     def _setup(self):
-        try:
-            self.education.open_setup_terminal()
-            self.note.setText("Follow the terminal window (it asks for your password), then click Refresh.")
-        except (OSError, self.education.EducationError) as e:
-            show_error(self, str(e))
+        self.setup_btn.setEnabled(False)
+
+        def done():
+            self.setup_btn.setEnabled(True)
+            self.refresh()
+            self.note.setText("Ready! Click Open Google Play, sign in, and install Minecraft Education.")
+        run_android_setup(self, self.note.setText, done)
+        self.setup_btn.setEnabled(True)
 
     def _play_store(self):
         try:
             cmd = self.education.launch_command(self.education.PLAY_STORE)
-            subprocess.Popen(cmd, start_new_session=True, env=self.education._clean_env(),
+            subprocess.Popen(cmd, start_new_session=True, env=self.education.launch_env(),
                              stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            self.note.setText("Google Play is opening. Sign in, search for Minecraft Education and install it. "
-                              "If Play says the device isn't certified, see docs.waydro.id/faq/google-play-certification")
+            self.note.setText("Android is starting (the first boot takes a minute or two). Sign in to Google Play, "
+                              "search for Minecraft Education and install it, then close the emulator and press Play.")
         except (OSError, self.education.EducationError) as e:
             show_error(self, str(e))
 
@@ -676,9 +715,18 @@ class EducationSetupTab(QWidget):
         if not path:
             return
         self.note.setText("Installing…")
-        run_task(self.education.install_apk, path, on_status=self.note.setText,
+        run_task(lambda callback: self.education.install_apk(path, callback["setStatus"]), use_callback=True,
+                 on_status=self.note.setText,
                  on_done=lambda _: self.note.setText("Installed! Close this and press Play."),
                  on_error=lambda m: (self.note.setText(""), show_error(self, m)))
+
+    def _remove(self):
+        if QMessageBox.question(self, "Remove emulator", "Delete the Android emulator and everything inside it "
+                                "(including Minecraft Education and its worlds)? This frees several GB."
+                                ) != QMessageBox.StandardButton.Yes:
+            return
+        run_task(self.education.remove_all, on_done=lambda _: self.refresh(),
+                 on_error=lambda m: show_error(self, m))
 
 
 class InstanceDialog(QDialog):

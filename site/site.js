@@ -1,6 +1,6 @@
 // Fill the download buttons from the latest GitHub release and highlight the
 // visitor's platform. Without JavaScript the buttons still link to the releases page.
-const REPO = "jace-deb/jace-launcher";
+const REPO = "okjace/jace-launcher";
 
 const PLATFORMS = [
   { id: "windows", suffix: "-windows-x64.exe", label: "Windows", note: "10 / 11" },

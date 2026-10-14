@@ -437,7 +437,7 @@ class MainWindow(QMainWindow):
 
     def _game_exited(self, con, inst, code):
         con.state.setText(f"Exited with code {code}")
-        if inst.is_education:                     # free Waydroid's memory when the window closes
+        if inst.is_education:                     # make sure the emulator is closed
             from jace import education
             threading.Thread(target=education.stop_session, daemon=True).start()
         self.playing = None

@@ -144,7 +144,7 @@ def _metainfo() -> str:
   <id>{APP_ID}</id>
   <name>Jace Launcher</name>
   <summary>Minecraft: Java Edition launcher with mod loaders, Modrinth and CurseForge</summary>
-  <developer id="io.github.jace-deb"><name>{AUTHOR}</name></developer>
+  <developer id="io.github.okjace"><name>{AUTHOR}</name></developer>
   <url type="homepage">{GITHUB_URL}</url>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>MIT</project_license>

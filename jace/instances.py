@@ -162,7 +162,10 @@ class Instance:
         self.data["last_played"] = time.time()
         self.save()
         kwargs = {}
-        if not self.is_java:
+        if self.is_education:
+            from jace.education import launch_env
+            kwargs["env"] = launch_env()           # Android SDK / emulator settings
+        elif not self.is_java:
             from jace.bedrock import _clean_env
             kwargs["env"] = _clean_env()      # our AppImage's library paths would break flatpak/mcpelauncher
         if sys.platform == "win32":

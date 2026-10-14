@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.8.0
+- **Minecraft Education now runs in Google's Android Emulator instead of Waydroid.** It's more reliable, and setup needs no password or system changes.
+  - **Setup → Set up Android emulator** downloads everything into Jace Launcher's folder, about 2 GB: Google's Android Emulator, Android 14 with Google Play (Play Store certified), and a virtual tablet. You accept Google's Android SDK License first.
+  - **Open Google Play** to sign in and install Minecraft Education, or **Install APK…**.
+  - **Play** opens it in the emulator's window. With **Settings → Full screen** it opens full screen through Gamescope.
+  - **Remove emulator** frees the space again.
+  - It needs hardware virtualization (KVM), which most computers have.
+- The project moved to **github.com/okjace** (website: <https://okjace.github.io/jace-launcher/>). Update checks keep working from older versions.
+
 ## 1.7.0
 - **Minecraft Education on Linux:** **New instance → Mod loader: Education** (Minecraft Education or its Preview).
   - The Android app runs in **Waydroid**, shown in a **Cage** window.

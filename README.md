@@ -1,6 +1,6 @@
 # ⛏ Jace Launcher
 
-**Website:** https://jace-deb.github.io/jace-launcher/ · **Jace Social:** https://jace-deb.github.io/jace-social/
+**Website:** https://okjace.github.io/jace-launcher/ · **Jace Social:** https://okjace.github.io/jace-social/
 
 A desktop launcher for Minecraft: Java Edition, written in Python and Qt (PySide6).
 
@@ -37,7 +37,7 @@ A desktop launcher for Minecraft: Java Edition, written in Python and Qt (PySide
   - Each instance has its own worlds and packs, and a version you can change.
   - Imports `.mcpack`, `.mcaddon`, `.mcworld` and `.mctemplate` files.
   - **Browse** shows Jace Store's Bedrock section for Bedrock instances.
-- **Minecraft Education instances** (Linux): the Android app in Waydroid, shown in a Cage window, or full screen with Gamescope. The instance's Setup tab installs Waydroid, Cage and Gamescope (in a terminal, with your password) and gets the app from Google Play or an APK.
+- **Minecraft Education instances** (Linux): the Android app in Google's Android Emulator (Android 14 with Google Play), in its own window or full screen with Gamescope. The instance's Setup tab downloads the emulator into Jace Launcher's folder (no password; you accept the Android SDK License) and gets the app from Google Play or an APK.
 - **Game log** window, plus per-instance memory, Java and JVM argument overrides.
 
 ## Running
