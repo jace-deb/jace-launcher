@@ -132,8 +132,7 @@ def client_command(version: str, data: Path, width: int = 0, height: int = 0) ->
     """Command that starts Bedrock <version> with <data> as its data folder."""
     vdir = version_dir(version)
     if not vdir:
-        raise BedrockError(f"Bedrock {version} isn't downloaded. Click \"Download versions\" (it opens the "
-                           f"Minecraft Bedrock Launcher) and download it there, then press Play again.")
+        raise BedrockError(f"Bedrock {version} isn't downloaded yet. Press Play again to download it.")
     args = ["-dg", str(vdir), "-dd", str(data)]
     mods = launcher_mods()
     if mods:
@@ -173,14 +172,120 @@ def launcher_mods() -> list[str]:
                 if Path(path).is_dir():
                     mods.append(path.rstrip("/"))
     if not mods:
-        arch = {"x86_64": "x86_64", "AMD64": "x86_64", "arm64": "arm64-v8a", "aarch64": "arm64-v8a"}.get(
-            __import__("platform").machine(), "x86_64")
+        arch = _arch()
         base = data_dir() / "mods" / "mcpelauncher-updates"
         found = sorted((d for d in base.glob(f"*/{arch}") if (d / "mod.json").is_file()),
                        key=lambda d: _version_key(d.parent.name), reverse=True)
         if found:
             mods.append(str(found[0]))
     return mods
+
+
+def _arch() -> str:
+    return {"x86_64": "x86_64", "AMD64": "x86_64", "arm64": "arm64-v8a", "aarch64": "arm64-v8a"}.get(
+        __import__("platform").machine(), "x86_64")
+
+
+VERSIONDB = "https://raw.githubusercontent.com/minecraft-linux/mcpelauncher-versiondb/master/versions.{}.json.min"
+_db_cache: dict[str, list[dict]] = {}
+
+
+def available_versions(include_beta: bool = False) -> list[dict]:
+    """Every Bedrock version the Minecraft Bedrock Launcher can download for this CPU, newest first:
+    [{name, code, beta, installed}] (from mcpelauncher-versiondb), plus any already downloaded."""
+    arch = _arch()
+    if arch not in _db_cache:
+        try:
+            _db_cache[arch] = [{"code": int(c), "name": n, "beta": bool(b)} for c, n, b in get_json(VERSIONDB.format(arch))]
+        except Exception:                          # offline: only what's downloaded
+            _db_cache.pop(arch, None)
+    have = {v["name"] for v in installed_versions()}
+    seen, out = set(), []
+    for v in sorted(_db_cache.get(arch, []), key=lambda v: (_version_key(v["name"]), v["code"]), reverse=True):
+        if v["name"] in seen or (v["beta"] and not include_beta and v["name"] not in have):
+            continue
+        seen.add(v["name"])
+        out.append({**v, "installed": v["name"] in have})
+    out += [{"name": n, "code": 0, "beta": False, "installed": True} for n in have - seen]
+    return sorted(out, key=lambda v: _version_key(v["name"]), reverse=True)
+
+
+def _set_default_profile_version(ini: Path, value: str | None, old: str | None = None) -> str | None:
+    """Set "version=" in profiles.ini's [Default] profile (the one mcpelauncher's window shows first).
+    Returns the previous value. value=None restores `old`."""
+    lines = ini.read_text(errors="replace").splitlines() if ini.is_file() else ["[Default]"]
+    if not any(l.strip() == "[Default]" for l in lines):
+        lines = ["[Default]"] + lines
+    section, prev, done = None, None, False
+    for i, line in enumerate(lines):
+        t = line.strip()
+        if t.startswith("["):
+            if section == "Default" and not done:
+                lines.insert(i, f"version={value if value is not None else old}")
+                done = True
+                break
+            section = t.strip("[]")
+        elif section == "Default" and t.startswith("version="):
+            prev = t.split("=", 1)[1]
+            lines[i] = f"version={value if value is not None else old}"
+            done = True
+            break
+    if not done:
+        lines.append(f"version={value if value is not None else old}")
+    ini.parent.mkdir(parents=True, exist_ok=True)
+    ini.write_text("\n".join(lines) + "\n")
+    return prev
+
+
+def _kill_launcher(kind: str):
+    if kind == "flatpak":
+        _run(["flatpak", "kill", FLATPAK_ID])
+    else:
+        for name in ("mcpelauncher-ui-qt", "mcpelauncher-client"):
+            _run(["pkill", "-f", name])
+
+
+def download_version(name: str, status=print, timeout: float = 1800) -> Path:
+    """Get Bedrock `name` like Java versions are fetched on Play: point the Bedrock launcher's Default
+    profile at that version, open its window (Google Play needs your account, which only it has:
+    click Download and play there), wait until it's downloaded, then close that window."""
+    import time
+    if d := version_dir(name):
+        return d
+    kind = installed()
+    if kind not in ("flatpak", "native", "mac"):
+        raise BedrockError("Install the Minecraft Bedrock Launcher first")
+    v = next((v for v in available_versions(include_beta=True) if v["name"] == name and v["code"]), None)
+    if not v:
+        raise BedrockError(f"Bedrock {name} isn't in the Minecraft Bedrock Launcher's version list")
+    ini = data_dir() / "profiles" / "profiles.ini"
+    _kill_launcher(kind)                           # it only reads profiles.ini when it starts
+    time.sleep(0.5)
+    old = _set_default_profile_version(ini, f"lock {v['code']}")
+    try:
+        open_launcher()
+        status(f"Downloading Bedrock {name}: in the Minecraft Bedrock Launcher window, click "
+               "Download and play (sign in to Google Play the first time)…")
+        end = time.monotonic() + timeout
+        while time.monotonic() < end:
+            time.sleep(2)
+            if d := version_dir(name):
+                time.sleep(1)                      # let it finish writing versions.ini
+                _kill_launcher(kind)               # it starts the game itself; Jace starts it per instance
+                status(f"Downloaded Bedrock {name}")
+                return d
+            if kind != "mac" and not _launcher_running(kind):
+                raise BedrockError(f"The Minecraft Bedrock Launcher was closed before Bedrock {name} was "
+                                   "downloaded. Press Play to try again.")
+        raise BedrockError(f"Timed out waiting for Bedrock {name} to download")
+    finally:
+        _set_default_profile_version(ini, None, old if old is not None else "googleplay")
+
+
+def _launcher_running(kind: str) -> bool:
+    if kind == "flatpak":
+        return FLATPAK_ID in _run(["flatpak", "ps", "--columns=application"]).stdout
+    return _run(["pgrep", "-f", "mcpelauncher-ui-qt"]).returncode == 0
 
 
 def com_mojang(root: Path | None = None) -> Path:

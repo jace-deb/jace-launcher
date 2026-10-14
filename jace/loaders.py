@@ -143,13 +143,13 @@ class ForgeLike:
 
 class BedrockLoader:
     """Minecraft: Bedrock Edition, through the Minecraft Bedrock Launcher (Linux / macOS).
-    Its "game versions" are the ones downloaded in mcpelauncher's window."""
+    Every version it can download is listed; the chosen one is downloaded on the first Play."""
     id, name = "bedrock", "Bedrock"
     needs_loader_version = False
 
     def game_versions(self, include_unstable=True):
         from jace import bedrock
-        return [v["name"] for v in bedrock.installed_versions()]
+        return [v["name"] for v in bedrock.available_versions(include_beta=include_unstable)]
 
     def loader_versions(self, mc):
         return []

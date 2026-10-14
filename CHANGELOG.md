@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.8.2
+- **Bedrock instances list every Bedrock version, and the one you pick downloads when you press Play**, like Java versions.
+  - The list comes from the Minecraft Bedrock Launcher's version database (about 130 releases for your CPU). Tick **Snapshots** when creating an instance to include betas.
+  - Downloads need your Google Play account, and only the Minecraft Bedrock Launcher has it. So on Play, its window opens with that version selected: click **Download and play** there. Jace Launcher closes it when the download finishes and starts Bedrock in your instance.
+  - The **Download versions…** button is gone. **Open Bedrock launcher** remains in the New instance window for signing in to Google Play.
+
 ## 1.8.1
 - **Bedrock:** "Install Bedrock launcher" now checks that the launcher actually got installed, and shows Flatpak's error if it didn't. Before, it could report success when nothing was installed.
 - **Bedrock:** if the Minecraft Bedrock Launcher closes right after "Download versions…", Jace Launcher now shows its error output instead of doing nothing.

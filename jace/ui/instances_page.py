@@ -90,9 +90,8 @@ class NewInstanceDialog(QDialog):
         self.br_install = QPushButton("Install Bedrock launcher")
         self.br_install.setObjectName("primary")
         self.br_install.clicked.connect(self._install_bedrock)
-        self.br_download = QPushButton("Download versions…")
-        self.br_download.setToolTip("Opens the Minecraft Bedrock Launcher: sign in to Google Play there and "
-                                    "download Bedrock versions, then come back")
+        self.br_download = QPushButton("Open Bedrock launcher")
+        self.br_download.setToolTip("Opens the Minecraft Bedrock Launcher (sign in to Google Play there)")
         self.br_download.clicked.connect(self._open_bedrock_launcher)
         self.br_refresh = QPushButton("Refresh")
         self.br_refresh.clicked.connect(self._load_versions)
@@ -122,10 +121,10 @@ class NewInstanceDialog(QDialog):
     def _lid(self):
         return self.loader.currentData()
 
-    def _bedrock_mode(self, on: bool):
+    def _bedrock_mode(self, on: bool, betas: bool = False):
         self.br_row.setVisible(on)
-        for w in (self.snapshots, self.old):
-            w.setVisible(not on)
+        self.snapshots.setVisible(not on or betas)
+        self.old.setVisible(not on)
         self.loader_version.setVisible(not on)
 
     def _setup_emulator(self):
@@ -158,31 +157,38 @@ class NewInstanceDialog(QDialog):
         except (OSError, bedrock.BedrockError) as e:
             show_error(self, str(e))
             return
-        self.info.setText("Sign in to Google Play in the Minecraft Bedrock Launcher and download a version there "
-                          "(you don't need to start it). Then click Refresh.")
+        self.info.setText("Sign in to Google Play in the Minecraft Bedrock Launcher, then close it.")
 
     def _load_bedrock_versions(self):
         from jace import bedrock
-        self._bedrock_mode(True)
+        self._bedrock_mode(True, betas=True)
         self.version.clear()
         why = bedrock.unsupported_reason()
         have = bedrock.installed()
         self.br_install.setVisible(not have)
         self.br_install.setEnabled(not why)
         self.br_download.setVisible(bool(have))
-        vs = bedrock.installed_versions() if have else []
-        for v in vs:
-            self.version.addItem(v["name"], v["name"])
         if why:
             self.info.setText(why)
-        elif not have:
+            return
+        if not have:
             self.info.setText("Bedrock runs through the Minecraft Bedrock Launcher, which plays the Android version of "
-                              "Minecraft. You need to own Minecraft on Google Play. Install it, then download a version.")
-        elif not vs:
-            self.info.setText("No Bedrock versions downloaded yet. Click Download versions…, sign in to Google Play "
-                              "there and download one, then click Refresh.")
-        else:
-            self.info.setText("Each Bedrock instance has its own worlds and packs. More versions: Download versions…")
+                              "Minecraft. You need to own Minecraft on Google Play. Install it first.")
+            return
+        self.info.setText("Loading versions...")
+        betas = self.snapshots.isChecked()
+
+        def done(vs):
+            if self._lid() != "bedrock":
+                return
+            self.version.clear()
+            for v in vs:
+                self.version.addItem(v["name"] + ("  (beta)" if v["beta"] else "")
+                                     + ("  (downloaded)" if v["installed"] else ""), v["name"])
+            self.info.setText("Each Bedrock instance has its own worlds and packs. The version downloads on the first "
+                              "Play: the Minecraft Bedrock Launcher opens, click Download and play there (it needs "
+                              "your Google Play account, which owns Minecraft).")
+        run_task(bedrock.available_versions, betas, on_done=done, on_error=lambda m: self.info.setText(m))
 
     def _load_education(self):
         from jace import education
@@ -764,11 +770,6 @@ class InstanceDialog(QDialog):
         self.loader_ver.setMinimumWidth(160)
         ver_row.addWidget(self.version)
         ver_row.addWidget(self.loader_ver)
-        if inst.is_bedrock:
-            dl = QPushButton("Download versions…")
-            dl.setToolTip("Opens the Minecraft Bedrock Launcher to download more Bedrock versions")
-            dl.clicked.connect(self._bedrock_download)
-            ver_row.addWidget(dl)
         ver_row.addStretch()
         f.addRow("Bedrock version" if inst.is_bedrock else "App" if inst.is_education else "Minecraft version", ver_row)
         self.version.currentIndexChanged.connect(self._load_loader_versions)
@@ -853,7 +854,14 @@ class InstanceDialog(QDialog):
         loader = LOADERS.get(inst.loader)
         self.loader_ver.setVisible(bool(loader and loader.needs_loader_version))
 
+        downloaded = set()
+
         def fetch():
+            if inst.is_bedrock:
+                from jace import bedrock
+                vs = bedrock.available_versions(include_beta=True)
+                downloaded.update(v["name"] for v in vs if v["installed"])
+                return [v["name"] for v in vs if not v["beta"] or v["installed"] or v["name"] == inst.mc_version]
             if not inst.is_java:
                 return [v for v in loader.game_versions()]
             types = {v["id"]: v["type"] for v in mojang_versions()}
@@ -864,7 +872,7 @@ class InstanceDialog(QDialog):
             self.version.blockSignals(True)
             self.version.clear()
             for v in ([inst.mc_version] if inst.mc_version not in vs else []) + vs:
-                self.version.addItem(v if v in vs or inst.is_bedrock is False else f"{v}  (not downloaded)", v)
+                self.version.addItem(f"{v}  (downloads on Play)" if inst.is_bedrock and v not in downloaded else v, v)
             self.version.setCurrentIndex(max(0, self.version.findData(inst.mc_version)))
             self.version.blockSignals(False)
             self._load_loader_versions()
@@ -886,17 +894,6 @@ class InstanceDialog(QDialog):
             if mc == self.inst.mc_version and self.inst.loader_version in vs:
                 self.loader_ver.setCurrentText(self.inst.loader_version)
         run_task(loader.loader_versions, mc, on_done=done, on_error=lambda m: None)
-
-    def _bedrock_download(self):
-        from jace import bedrock
-        try:
-            bedrock.open_launcher()
-        except (OSError, bedrock.BedrockError) as e:
-            show_error(self, str(e))
-            return
-        QMessageBox.information(self, "Download versions", "Download Bedrock versions in the Minecraft Bedrock "
-                                "Launcher window (sign in to Google Play the first time). When it's done, "
-                                "reopen these settings to pick the new version.")
 
     def _apply_version(self):
         """Switch to the chosen version; game files are fetched on the next Play."""

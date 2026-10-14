@@ -89,9 +89,7 @@ class Instance:
             if not bedrock.installed():
                 bedrock.install(callback.get("setStatus", print))
             if not bedrock.version_dir(self.mc_version):
-                raise bedrock.BedrockError(
-                    f"Bedrock {self.mc_version} isn't downloaded. Open the instance's Settings → "
-                    "Download versions (it opens the Minecraft Bedrock Launcher), download it, then press Play.")
+                bedrock.download_version(self.mc_version, callback.get("setStatus", print))
             return
         if self.data.get("version_id") and not force:
             # still verify/repair the base version quickly (only downloads missing files)
