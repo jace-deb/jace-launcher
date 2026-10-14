@@ -77,7 +77,7 @@ def mac_app() -> Path | None:
     except (OSError, ValueError, KeyError):
         pass
     for d in (Path("/Applications"), HOME / "Applications"):
-        for pattern in ("Minecraft*Education*.app", "*Education*.app"):
+        for pattern in ("minecraft-edu*.app", "Minecraft*Education*.app"):
             for app in sorted(d.glob(pattern)):
                 return app
     return None

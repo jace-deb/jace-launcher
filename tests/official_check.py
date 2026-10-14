@@ -41,7 +41,19 @@ def status(msg, _last=[""]):
 
 if os.environ.get("FULL"):
     os.environ["JACE_NO_INTERACTIVE"] = "1"
-    o.ensure("education", status)
+    try:
+        o.ensure("education", status)
+    except o.OfficialError:
+        if o.IS_WIN:                             # what did the installer do?
+            print(o._ps(r"""
+"--- appx:"; Get-AppxPackage -AllUsers | Where-Object { $_.Name -match 'minecraft|edu|mojang' } | Format-List Name, PackageFullName, InstallLocation, Status | Out-String
+"--- provisioned:"; Get-AppxProvisionedPackage -Online | Where-Object { $_.DisplayName -match 'minecraft|edu' } | Out-String
+"--- uninstall entries:"; Get-ChildItem HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall, HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall, HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall | Get-ItemProperty | Where-Object { $_.DisplayName -match 'minecraft|edu' } | Format-List DisplayName, InstallLocation, UninstallString | Out-String
+"--- files:"; Get-ChildItem 'C:\Program Files', 'C:\Program Files (x86)', "$env:LOCALAPPDATA\Programs", 'C:\XboxGames' -ErrorAction SilentlyContinue | Where-Object { $_.Name -match 'minecraft|edu' } | Format-List FullName | Out-String
+"--- recent temp logs:"; Get-ChildItem $env:TEMP -Recurse -Include *.log -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 5 | ForEach-Object { "== " + $_.FullName; Get-Content $_.FullName -Tail 40 }
+"--- appx deployment events:"; Get-WinEvent -LogName 'Microsoft-Windows-AppXDeploymentServer/Operational' -MaxEvents 15 -ErrorAction SilentlyContinue | Format-List TimeCreated, Message | Out-String -Width 300
+""", timeout=180))
+        raise
     assert o.installed("education"), "Minecraft Education not found after installing"
     print("installed:", o.win_package("education") if o.IS_WIN else o.mac_app())
     print("launch:", o.launch_command("education")[:4])
