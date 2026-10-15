@@ -442,7 +442,19 @@ def launch_command(package: str, fullscreen: bool = False, width: int = 0, heigh
         args.append("--fullscreen")
     elif width > 0 and height > 0:
         args += [f"--window-width={width}", f"--window-height={height}"]
-    return _scrcpy("Minecraft Education", *args)
+    return _performance_hold() + _scrcpy("Minecraft Education", *args)
+
+
+def _performance_hold() -> list[str]:
+    """Ask power-profiles-daemon for the Performance profile while the game runs (it goes back by
+    itself when the game closes). On a Balanced laptop this nearly halves the camera delay: the
+    emulator, Android's frame encoder and the game all wait on CPU clocks."""
+    ppc = shutil.which("powerprofilesctl")
+    if not ppc or _run([ppc, "get"], timeout=5).returncode != 0:
+        return []
+    if "performance" not in _run([ppc, "list"], timeout=5).stdout:
+        return []
+    return [ppc, "launch", "-p", "performance", "-r", "Playing Minecraft Education", "--"]
 
 
 def launch_env() -> dict:

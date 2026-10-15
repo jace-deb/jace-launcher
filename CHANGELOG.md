@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.10.3
+- **About half the camera delay in Minecraft Education on Linux.** While the game is open, Jace Launcher asks your system for the **Performance** power profile (power-profiles-daemon), and it switches back on its own when you close the game. On a laptop set to Balanced, the emulator, Android's frame encoder and the game were all waiting on low CPU clocks. Measured from an input to the picture changing, the median delay dropped from about 213 ms to about 122 ms.
+
 ## 1.10.2
 - **Less mouse lag in Minecraft Education on Linux.** Android compresses every frame of the game window in software, on a single thread. On smaller PCs, that encoder was saturated at 1280×720, so frames queued up behind it and the mouse lagged.
   - On those PCs Android now renders at 1024×576 (the same shape as your monitor), and the stream uses a lower bitrate.
