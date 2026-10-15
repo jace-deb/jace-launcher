@@ -60,6 +60,20 @@ class EducationError(Exception):
 
 
 license_accepted = False        # set by the UI once the user accepted the Android SDK License
+host_screen: tuple[int, int] | None = None   # set by the UI: the monitor's size in pixels
+
+# Preinstalled Google apps that only use memory here (Android swaps and Minecraft lags with them
+# running). Turned off with "pm disable-user", which is undone by "pm enable". The Play Store,
+# Play services, Chrome / WebView (school sign-in) and the keyboard stay on.
+UNNEEDED_APPS = [
+    "com.google.android.youtube", "com.google.android.apps.youtube.music", "com.google.android.gm",
+    "com.google.android.googlequicksearchbox", "com.google.android.apps.messaging", "com.google.android.apps.docs",
+    "com.google.android.apps.wellbeing", "com.google.android.apps.photos", "com.google.android.dialer",
+    "com.google.android.contacts", "com.google.android.calendar", "com.google.android.apps.maps",
+    "com.google.android.videos", "com.google.android.apps.tachyon", "com.google.android.as",
+    "com.google.android.apps.restore", "com.google.android.apps.safetyhub", "com.google.android.deskclock",
+    "com.google.android.calculator", "com.google.android.apps.nbu.files", "com.google.android.apps.subscriptions.red",
+]
 
 
 def _clean_env() -> dict:
@@ -263,7 +277,7 @@ def _host_ram_mb() -> int:
         return 8192
 
 
-def tune_avd():
+def tune_avd(screen: tuple[int, int] | None = None):
     """Size the virtual tablet for this PC: a big screen and lots of RAM on a small laptop means swapping
     and slow video encoding (the main causes of lag). Rendering 1280x800 is about 4x less work than 2560x1600."""
     cfg = AVD_HOME / f"{AVD}.avd" / "config.ini"
@@ -271,11 +285,17 @@ def tune_avd():
         return
     cores, ram = os.cpu_count() or 4, _host_ram_mb()
     big = cores >= 8 and ram >= 15000
+    # the same shape as the monitor (or game window), so full screen has no black bars
+    sw, sh = screen if screen and screen[0] > 0 and screen[1] > 0 else (16, 10)
+    if sw < sh:
+        sw, sh = sh, sw
+    height = 1080 if big else 720
+    width = max(height, round(height * sw / sh / 2) * 2)
     want = {
         "hw.cpu.ncore": str(max(2, min(8, cores - 2))),
         "hw.ramSize": str(4096 if ram >= 15000 else 3072 if ram >= 11000 else 2560),
-        "hw.lcd.width": "1920" if big else "1280",
-        "hw.lcd.height": "1200" if big else "800",
+        "hw.lcd.width": str(width),
+        "hw.lcd.height": str(height),
         "hw.lcd.density": "240" if big else "160",
         "hw.gpu.enabled": "yes", "hw.gpu.mode": "host", "hw.keyboard": "yes",
         "hw.initialOrientation": "landscape", "vm.heapSize": "256M",
@@ -288,10 +308,14 @@ def tune_avd():
     cfg.write_text("\n".join(lines) + "\n")
 
 
-def boot(status_cb=print):
+def boot(status_cb=print, screen: tuple[int, int] | None = None):
     """Start Android in the background (no emulator window) and wait until it has booted."""
+    if running() and screen and _needs_retune(screen):
+        status_cb("Restarting Android for the new screen size…")
+        stop_session()
+        time.sleep(3)
     if not running():
-        tune_avd()
+        tune_avd(screen or host_screen)
         status_cb("Starting Android…")
         log = open(DATA_DIR / "android-emulator.log", "w")
         subprocess.Popen([str(EMULATOR), *EMULATOR_ARGS], start_new_session=True, env=_clean_env(),
@@ -308,6 +332,23 @@ def boot(status_cb=print):
     _adb("shell", "settings", "put", "secure", "immersive_mode_confirmations", "confirmed")
     for anim in ("window_animation_scale", "transition_animation_scale", "animator_duration_scale"):
         _adb("shell", "settings", "put", "global", anim, "0")
+    if _adb("shell", "settings", "get", "global", "jace_slimmed").stdout.strip() != "2":
+        status_cb("Turning off Android apps Minecraft doesn't need…")
+        _adb("shell", "for p in " + " ".join(UNNEEDED_APPS) + "; do pm disable-user --user 0 $p >/dev/null 2>&1; done",
+             timeout=120)
+        _adb("shell", "settings", "put", "global", "jace_slimmed", "2")
+    _adb("shell", "am", "kill-all")               # background apps out, so the game gets the memory
+
+
+def _needs_retune(screen) -> bool:
+    cfg = AVD_HOME / f"{AVD}.avd" / "config.ini"
+    try:
+        have = dict(ln.split("=", 1) for ln in cfg.read_text().splitlines() if "=" in ln)
+        w, h = int(have.get("hw.lcd.width", 0)), int(have.get("hw.lcd.height", 0))
+    except (OSError, ValueError):
+        return False
+    sw, sh = max(screen), min(screen)
+    return bool(h) and abs(w / h - sw / sh) > 0.02
 
 
 def app_installed(package: str) -> bool:
@@ -378,14 +419,14 @@ def ensure_app(package: str, status_cb=print, timeout: float = 1800):
             win.terminate()
 
 
-def prepare(package: str, status_cb=print, license_accepted=False):
+def prepare(package: str, status_cb=print, license_accepted=False, screen: tuple[int, int] | None = None):
     """Everything Play needs: the emulator (set up on first use), Android running, the app installed."""
     if not kvm_ok():
         raise EducationError(problem())
     if not set_up():
         setup(status_cb, license_accepted=license_accepted or globals()["license_accepted"])
     ensure_scrcpy(status_cb)
-    boot(status_cb)
+    boot(status_cb, screen)
     ensure_app(package, status_cb)
 
 

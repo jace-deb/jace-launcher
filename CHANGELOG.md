@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.10.1
+- **Minecraft Education on Linux lags much less.** Android's preinstalled Google apps (YouTube, YouTube Music, Gmail, the Google app, Messages, Docs, Photos and more) ran in the background and filled the virtual tablet's memory, so it swapped while you played.
+  - Jace Launcher now turns those apps off in its emulator. This can be undone, and the Play Store, Play services, Chrome and the keyboard stay on.
+  - It also clears background apps before the game starts.
+  - Android's swap use dropped from about 900 MB to about 350 MB.
+- **No black bars in full screen.** Android's screen now has the same shape as your monitor (for example, 1280×720 on a 1920×1080 screen), or as your game window if you set a size. If the shape changes, Android restarts once to apply it.
+
 ## 1.10.0
 - **Minecraft Bedrock on Windows.** Bedrock instances play the official Minecraft for Windows. If it isn't installed, Play opens its Microsoft Store page and continues once it's installed. Worlds and packs from Browse and the instance's tabs go into the game's own folder.
 - **Minecraft Education on Windows and macOS.** Education instances use Microsoft's official app. On Play, Jace Launcher downloads it from Microsoft, installs it (silently on Windows, into Applications on macOS) and keeps it updated.

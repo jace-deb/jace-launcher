@@ -415,6 +415,10 @@ class MainWindow(QMainWindow):
 
         if inst.is_education and sys.platform == "linux":   # first Play: set up the Android emulator
             from jace import education
+            scr = self.screen() or QApplication.primaryScreen()
+            if scr:                               # Android's screen gets the monitor's shape: no black bars
+                dpr = scr.devicePixelRatio()
+                education.host_screen = (round(scr.size().width() * dpr), round(scr.size().height() * dpr))
             from jace.ui.instances_page import accept_android_license
             if not education.kvm_ok():
                 QMessageBox.warning(self, "Minecraft Education", education.problem())

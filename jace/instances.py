@@ -89,7 +89,9 @@ class Instance:
         if self.is_education:
             from jace import education
             pkg = education.PACKAGES.get(self.mc_version, education.PACKAGES["Minecraft Education"])
-            education.prepare(pkg, callback.get("setStatus", print))
+            w, h = int(self.data.get("window_width") or 0), int(self.data.get("window_height") or 0)
+            screen = education.host_screen if self.data.get("fullscreen") or not (w and h) else (w, h)
+            education.prepare(pkg, callback.get("setStatus", print), screen=screen)
             return
         if self.is_bedrock:
             from jace import bedrock
