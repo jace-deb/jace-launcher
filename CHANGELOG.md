@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.10.2
+- **Less mouse lag in Minecraft Education on Linux.** Android compresses every frame of the game window in software, on a single thread. On smaller PCs, that encoder was saturated at 1280×720, so frames queued up behind it and the mouse lagged.
+  - On those PCs Android now renders at 1024×576 (the same shape as your monitor), and the stream uses a lower bitrate.
+  - PCs with 8+ CPU threads and 16 GB+ RAM still get 1920×1080.
+
 ## 1.10.1
 - **Minecraft Education on Linux lags much less.** Android's preinstalled Google apps (YouTube, YouTube Music, Gmail, the Google app, Messages, Docs, Photos and more) ran in the background and filled the virtual tablet's memory, so it swapped while you played.
   - Jace Launcher now turns those apps off in its emulator. This can be undone, and the Play Store, Play services, Chrome and the keyboard stay on.

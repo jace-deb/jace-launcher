@@ -289,7 +289,9 @@ def tune_avd(screen: tuple[int, int] | None = None):
     sw, sh = screen if screen and screen[0] > 0 and screen[1] > 0 else (16, 10)
     if sw < sh:
         sw, sh = sh, sw
-    height = 1080 if big else 720
+    # Android encodes every frame for the game window in software, on one thread: on smaller PCs a
+    # 1280x720 picture keeps that encoder saturated, frames queue up and the mouse lags behind
+    height = 1080 if big else 576
     width = max(height, round(height * sw / sh / 2) * 2)
     want = {
         "hw.cpu.ncore": str(max(2, min(8, cores - 2))),
@@ -361,7 +363,7 @@ def google_signed_in() -> bool:
 
 def _scrcpy(title: str, *args) -> list[str]:
     return [str(SCRCPY), f"--window-title={title}", "--no-audio", "--stay-awake", "--disable-screensaver",
-            "--max-fps=60", "--video-bit-rate=12M", *args]
+            "--max-fps=60", "--video-bit-rate=8M", *args]
 
 
 def _scrcpy_env() -> dict:
