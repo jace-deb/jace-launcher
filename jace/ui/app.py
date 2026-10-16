@@ -766,6 +766,7 @@ def main():
     if desktop.running_installed_copy() and desktop.running_appimage():
         try:
             desktop.remove_duplicate_entries()
+            desktop.refresh_integration()
         except OSError:
             pass
     if "--launch" in argv and quick_launch(argv):

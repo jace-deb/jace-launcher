@@ -114,6 +114,7 @@ def _clean_env() -> dict:
               "QTWEBENGINE_LOCALES_PATH", "LD_LIBRARY_PATH", "LD_LIBRARY_PATH_ORIG"):
         env.pop(k, None)
     env["PYINSTALLER_RESET_ENVIRONMENT"] = "1"
+    env["APPIMAGELAUNCHER_DISABLE"] = "1"          # see desktop.NO_AIL
     return env
 
 

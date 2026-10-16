@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.10.4
+- **Jace Launcher starts again on niri, Sway, Hyprland and other Wayland desktops that have AppImageLauncher installed.**
+  - AppImageLauncher runs before every AppImage. It's a Qt5 app, and without `qt5-wayland` it crashed before Jace Launcher could start.
+  - The menu entry, desktop shortcut, `jace-launcher` command, instance shortcuts and updates now start Jace Launcher directly, without it.
+  - Existing entries are fixed the next time Jace Launcher starts.
+
 ## 1.10.3
 - **About half the camera delay in Minecraft Education on Linux.** While the game is open, Jace Launcher asks your system for the **Performance** power profile (power-profiles-daemon), and it switches back on its own when you close the game. On a laptop set to Balanced, the emulator, Android's frame encoder and the game were all waiting on low CPU clocks. Measured from an input to the picture changing, the median delay dropped from about 213 ms to about 122 ms.
 

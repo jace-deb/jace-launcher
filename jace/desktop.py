@@ -120,13 +120,56 @@ def install_app(target_dir: Path, options: dict, status=print) -> Path:
     return install(target_dir, status=status, **{k: bool(options.get(k)) for k, _, _ in install_options()})
 
 
+# AppImageLauncher (a binfmt handler some distros ship) runs before every AppImage. It's a Qt5
+# app, and on Wayland desktops without qt5-wayland (niri, Sway, Hyprland...) it aborts, so Jace
+# Launcher never started. This variable tells it to step aside.
+NO_AIL = "APPIMAGELAUNCHER_DISABLE=1"
+
+
+def exec_line(exe: Path, *args: str) -> str:
+    """A desktop-entry Exec= value that starts our AppImage directly."""
+    return " ".join([f"env {NO_AIL}", f'"{exe}"', *args])
+
+
+def _bin_script(exe: Path) -> str:
+    return f'#!/bin/sh\n# Jace Launcher\nexec env {NO_AIL} "{exe}" "$@"\n'
+
+
+def refresh_integration():
+    """Bring the installed copy's menu entry, desktop shortcut, terminal command and instance
+    shortcuts up to date (older versions started the AppImage through AppImageLauncher)."""
+    exe = installed_path()
+    if not exe or exe.suffix == ".app" or not exe.is_file():
+        return
+    parts = install_record().get("parts", [])
+    entry = _desktop_entry(exe)
+    changed = False
+    for want, path in (("menu", MENU_FILE), ("desktop", desktop_shortcut())):
+        if want in parts and path.is_file() and path.read_text(errors="replace") != entry:
+            _write(path, entry, executable=True)
+            changed = True
+    if "terminal" in parts and (BIN_LINK.is_symlink() or not BIN_LINK.is_file()
+                                or BIN_LINK.read_text(errors="replace") != _bin_script(exe)):
+        BIN_LINK.unlink(missing_ok=True)
+        _write(BIN_LINK, _bin_script(exe), executable=True)
+    old = f'Exec="{exe}" '
+    for d in (MENU_FILE.parent, desktop_dir()):
+        for f in d.glob("jace-instance-*.desktop") if d.is_dir() else []:
+            text = f.read_text(errors="replace")
+            if old in text:
+                f.write_text(text.replace(old, f"Exec=env {NO_AIL} \"{exe}\" "))
+                changed = True
+    if changed:
+        _refresh_menus()
+
+
 def _desktop_entry(exe: Path) -> str:
     return ("[Desktop Entry]\n"
             "Type=Application\n"
             "Name=Jace Launcher\n"
             "GenericName=Minecraft Launcher\n"
             "Comment=Play Minecraft: Java Edition with mods, modpacks, skins and capes\n"
-            f"Exec=\"{exe}\" %U\n"
+            f"Exec={exec_line(exe, '%U')}\n"
             f"Icon={APP_ID}\n"
             "Terminal=false\n"
             "Categories=Game;\n"
@@ -135,7 +178,7 @@ def _desktop_entry(exe: Path) -> str:
             "Actions=uninstall;\n\n"
             "[Desktop Action uninstall]\n"
             "Name=Uninstall Jace Launcher\n"
-            f"Exec=\"{exe}\" --uninstall-gui\n")
+            f"Exec={exec_line(exe, '--uninstall-gui')}\n")
 
 
 def _metainfo() -> str:
@@ -252,8 +295,7 @@ def install(target_dir: Path = DEFAULT_DIR, menu=True, desktop=True, terminal=Tr
         done.append("desktop")
     if terminal:
         status("Adding the 'jace-launcher' command")
-        BIN_LINK.parent.mkdir(parents=True, exist_ok=True)
-        BIN_LINK.symlink_to(exe)
+        _write(BIN_LINK, _bin_script(exe), executable=True)
         done.append("terminal")
     if appstream:
         status("Registering with software centers")

@@ -25,8 +25,8 @@ def launcher_command() -> list[str]:
     installed = desktop.installed_path()
     if installed and installed.suffix == ".app":
         return [str(installed / "Contents" / "MacOS" / "Jace Launcher")]
-    if installed:
-        return [str(installed)]
+    if installed:                                 # (skip AppImageLauncher: see desktop.NO_AIL)
+        return ["env", desktop.NO_AIL, str(installed)]
     if desktop.frozen():
         return [sys.executable]
     entry = Path(__file__).resolve().parent.parent / "packaging" / "entry.py"
