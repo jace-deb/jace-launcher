@@ -168,9 +168,14 @@ class NewInstanceDialog(QDialog):
         have = bedrock.installed()
         self.br_install.setVisible(not have)
         self.br_install.setEnabled(not why)
-        self.br_download.setVisible(bool(have) and have != "windows")
+        self.br_download.setVisible(bool(have) and have not in ("windows", "bol"))
         if why:
             self.info.setText(why)
+            return
+        if not have and sys.platform.startswith("linux"):
+            self.info.setText("Bedrock on Linux runs the Windows version of Minecraft Bedrock through BedrockOnLinux "
+                              "(real Xbox sign-in, Friends, servers and Realms). You need a Microsoft account that "
+                              "owns Minecraft. Install it first (about 175 MB).")
             return
         if not have:
             self.info.setText("Bedrock runs through the Minecraft Bedrock Launcher, which plays the Android version of "
@@ -184,12 +189,19 @@ class NewInstanceDialog(QDialog):
                 return
             self.version.clear()
             for v in vs:
-                self.version.addItem(v["name"] + ("  (beta)" if v["beta"] else "")
+                self.version.addItem(v["name"] + ("  (beta)" if v["beta"] and "Preview" not in v["name"] else "")
                                      + ("  (downloaded)" if v["installed"] else ""), v["name"])
             if have == "windows":
                 self.info.setText("Plays the official Minecraft for Windows (Bedrock). If it isn't installed, Play "
                                   "opens it in the Microsoft Store (it's bought with your Microsoft account). Worlds "
                                   "and packs are the game's own, shared by every Bedrock instance.")
+                return
+            if have == "bol":
+                self.info.setText("Plays the Windows version of Minecraft Bedrock through BedrockOnLinux. Each instance "
+                                  "has its own worlds, packs and Xbox sign-in (sign in inside the game). The first "
+                                  "Play links your Microsoft account in a sign-in window, so the game can be downloaded "
+                                  "from the Microsoft Store, then downloads it (a few GB, once per version). Tick "
+                                  "Snapshots for Minecraft Preview.")
                 return
             self.info.setText("Each Bedrock instance has its own worlds and packs. The version downloads on the first "
                               "Play: the Minecraft Bedrock Launcher opens, click Download and play there (it needs "

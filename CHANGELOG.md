@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.11.0
+- **Bedrock on Linux now uses [BedrockOnLinux](https://github.com/Wyze3306/BedrockOnLinux)** instead of the Minecraft Bedrock Launcher. It runs the Windows version of Minecraft Bedrock, with real Xbox sign-in, Friends, servers, Realms and the Marketplace. You need a Microsoft account that owns Minecraft; Google Play isn't involved anymore.
+  - Jace Launcher downloads BedrockOnLinux and checks it against its release's checksums. If you already have a copy in `~/Applications`, installed as a package, or as a Flatpak, it uses that one.
+  - The version list includes every Windows Bedrock release. Tick **Snapshots** to add Minecraft Preview.
+  - The first Play links your Microsoft account in a sign-in window, so the game can be downloaded from the Microsoft Store. Then it downloads the version you picked. Each version and Proton download only once, and every instance shares them.
+  - Each instance still has its own worlds, packs and settings. It's a separate BedrockOnLinux profile, so you sign in to Xbox inside the game once per instance.
+  - Importing packs and worlds, and Jace Store's Bedrock section, work as before.
+  - Bedrock instances you made with the Minecraft Bedrock Launcher keep their old worlds in their folder, under `games/com.mojang`.
+- macOS still uses the Minecraft Bedrock Launcher, and Windows still plays the official game.
+
 ## 1.10.4
 - **Jace Launcher starts again on niri, Sway, Hyprland and other Wayland desktops that have AppImageLauncher installed.**
   - AppImageLauncher runs before every AppImage. It's a Qt5 app, and without `qt5-wayland` it crashed before Jace Launcher could start.

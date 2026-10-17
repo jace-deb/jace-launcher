@@ -33,6 +33,7 @@ MAC_APP = "Minecraft Bedrock Launcher.app"
 HOME = Path.home()
 IS_MAC = sys.platform == "darwin"
 IS_WIN = sys.platform == "win32"
+IS_LINUX = sys.platform.startswith("linux")      # Linux: BedrockOnLinux (jace/bol.py), not mcpelauncher
 
 # what each kind of content is called, and the com.mojang folder it lives in
 FOLDERS = {
@@ -81,6 +82,9 @@ def installed() -> str | None:
         return "windows"
     if IS_MAC:
         return "mac" if mac_app() else None
+    if IS_LINUX:
+        from jace import bol
+        return "bol" if bol.installed() else None
     if flatpak_installed():
         return "flatpak"
     return "native" if native_launcher() else None
@@ -197,6 +201,12 @@ def available_versions(include_beta: bool = False) -> list[dict]:
     if IS_WIN:
         from jace import official
         return [{"name": official.NAMES["bedrock"], "code": 0, "beta": False, "installed": official.installed("bedrock")}]
+    if IS_LINUX:
+        from jace import bol
+        try:
+            return [{**v, "code": 0} for v in bol.versions(include_beta)]
+        except bol.BolError:
+            return []
     arch = _arch()
     if arch not in _db_cache:
         try:
@@ -294,6 +304,9 @@ def _launcher_running(kind: str) -> bool:
 
 def com_mojang(root: Path | None = None) -> Path:
     """Bedrock's com.mojang folder (worlds, packs) inside a data folder (an instance's)."""
+    if root is not None and IS_LINUX:
+        from jace import bol
+        return bol.mojang_dirs(root)[0]
     if root is not None and not IS_WIN:          # Windows: the official game has one shared folder
         return Path(root) / "games" / "com.mojang"
     if IS_WIN:
@@ -306,7 +319,7 @@ def com_mojang(root: Path | None = None) -> Path:
 
 
 def unsupported_reason() -> str | None:
-    if IS_WIN or IS_MAC:
+    if IS_WIN or IS_MAC or IS_LINUX:
         return None
     if not shutil.which("flatpak") and not native_launcher():
         return ("Bedrock on Linux needs Flatpak. Install it with your package manager (for example "
@@ -325,6 +338,12 @@ def install(status=print):
         raise BedrockError("On Windows, get Minecraft Bedrock from the Microsoft Store or the Xbox app.")
     if IS_MAC:
         return _install_mac(status)
+    if IS_LINUX:
+        from jace import bol
+        try:
+            return bol.install(status)
+        except bol.BolError as e:
+            raise BedrockError(str(e)) from e
     status("Adding Flathub (just for you, no password needed)…")
     _run(["flatpak", "remote-add", "--user", "--if-not-exists", "flathub", FLATHUB])
     status("Installing the Minecraft Bedrock Launcher from Flathub (this can take a few minutes)…")
@@ -385,7 +404,10 @@ def open_launcher():
     """Open mcpelauncher's window: Google Play sign-in and downloading versions (or Bedrock on Windows)."""
     kind = installed()
     opts = dict(stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    if kind == "windows":
+    if kind == "bol":
+        from jace import bol
+        bol.open_gui()
+    elif kind == "windows":
         os.startfile("minecraft:")             # noqa: S606 - opens Bedrock if it's installed
     elif kind == "mac":
         subprocess.Popen(["open", str(mac_app())], **opts)
@@ -440,6 +462,9 @@ def list_content(data: Path | None = None) -> dict[str, list[dict]]:
     out = {}
     for kind, sub in FOLDERS.items():
         items = []
+        if IS_LINUX and data is not None:
+            from jace import bol
+            root = bol.content_root(data, sub)
         for d in sorted((root / sub).iterdir()) if (root / sub).is_dir() else []:
             if not d.is_dir():
                 continue
@@ -456,6 +481,9 @@ def list_content(data: Path | None = None) -> dict[str, list[dict]]:
 def remove(path: str, data: Path | None = None):
     p = Path(path).resolve()
     root = com_mojang(data).resolve()
+    if IS_LINUX and data is not None:
+        from jace import bol
+        root = bol.bedrock_root(data).resolve()
     if root not in p.parents:
         raise BedrockError("That isn't in Minecraft Bedrock's folder")
     shutil.rmtree(p)
@@ -553,6 +581,12 @@ def import_file(path: str | Path, data: Path | None = None) -> list[str]:
     """Import a .mcpack / .mcaddon / .mcworld / .mctemplate (or a zip of one) into a data
     folder (an instance's). Returns what was added."""
     path = Path(path)
+    if IS_LINUX and data is not None:
+        from jace import bol
+        try:
+            return bol.import_files([path], data)
+        except bol.BolError as e:
+            raise BedrockError(str(e)) from e
     try:
         zf = zipfile.ZipFile(path)
     except zipfile.BadZipFile as e:

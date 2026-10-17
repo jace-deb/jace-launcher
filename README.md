@@ -34,8 +34,9 @@ A desktop launcher for Minecraft: Java Edition, written in Python and Qt (PySide
 - **Server add-ons**: one-click LuckPerms, WorldEdit, Chunky, spark and Ledger (an instance's **Mods** tab) for worlds you host with the Jace Social mod.
 - **Minecraft Bedrock instances**: pick **Bedrock** as the loader in New instance.
   - On **Windows** they play the official Minecraft for Windows. If it isn't installed, Play opens its Microsoft Store page.
-  - On **Linux and macOS**:
-    - They run through the [Minecraft Bedrock Launcher](https://minecraft-linux.github.io), which needs Minecraft owned on Google Play. It downloads the versions; Jace Launcher installs it for you.
+  - On **Linux** they run the Windows version of Bedrock through [BedrockOnLinux](https://github.com/Wyze3306/BedrockOnLinux), with real Xbox sign-in, Friends, servers and Realms. You need a Microsoft account that owns Minecraft. Jace Launcher downloads BedrockOnLinux, and the first Play links your account in a sign-in window and downloads the version you picked.
+  - On **macOS** they run through the [Minecraft Bedrock Launcher](https://minecraft-linux.github.io), which needs Minecraft owned on Google Play. Jace Launcher installs it for you.
+  - On Linux and macOS:
     - Each instance has its own worlds and packs, and a version you can change.
     - Imports `.mcpack`, `.mcaddon`, `.mcworld` and `.mctemplate` files.
     - **Browse** shows Jace Store's Bedrock section for Bedrock instances.

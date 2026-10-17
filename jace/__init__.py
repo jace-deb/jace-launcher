@@ -1,7 +1,7 @@
 """Jace Launcher - a Minecraft: Java Edition launcher."""
 
 APP_NAME = "Jace Launcher"
-APP_VERSION = "1.10.4"
+APP_VERSION = "1.11.0"
 AUTHOR = "jace.deb"
 GITHUB_REPO = "okjace/jace-launcher"
 GITHUB_URL = f"https://github.com/{GITHUB_REPO}"

@@ -142,7 +142,8 @@ class ForgeLike:
 
 
 class BedrockLoader:
-    """Minecraft: Bedrock Edition, through the Minecraft Bedrock Launcher (Linux / macOS).
+    """Minecraft: Bedrock Edition: the official game on Windows, BedrockOnLinux on Linux and the
+    Minecraft Bedrock Launcher on macOS.
     Every version it can download is listed; the chosen one is downloaded on the first Play."""
     id, name = "bedrock", "Bedrock"
     needs_loader_version = False
@@ -187,7 +188,7 @@ class EducationLoader:
         return ""
 
 
-LOADERS["bedrock"] = BedrockLoader()        # Windows: the official game; Linux / macOS: mcpelauncher
+LOADERS["bedrock"] = BedrockLoader()        # Windows: the official game; Linux: BedrockOnLinux; macOS: mcpelauncher
 LOADERS["education"] = EducationLoader()    # Windows / macOS: the official app; Linux: in the Android Emulator
 
 # Names used by Modrinth / CurseForge for each loader

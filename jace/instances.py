@@ -97,7 +97,13 @@ class Instance:
             from jace import bedrock
             if not bedrock.installed():
                 bedrock.install(callback.get("setStatus", print))
-            if not bedrock.version_dir(self.mc_version):
+            if sys.platform.startswith("linux"):
+                from jace import bol
+                try:
+                    bol.prepare(self.mc_version, self.game_dir, callback.get("setStatus", print))
+                except bol.BolError as e:
+                    raise bedrock.BedrockError(str(e)) from e
+            elif not bedrock.version_dir(self.mc_version):
                 bedrock.download_version(self.mc_version, callback.get("setStatus", print))
             return
         if self.data.get("version_id") and not force:
@@ -128,6 +134,9 @@ class Instance:
             w, h = (int(self.data.get("window_width") or 0), int(self.data.get("window_height") or 0))
             pkg = education.PACKAGES.get(self.mc_version, education.PACKAGES["Minecraft Education"])
             return education.launch_command(pkg, bool(self.data.get("fullscreen")), w, h)
+        if self.is_bedrock and sys.platform.startswith("linux"):
+            from jace import bol
+            return bol.play_command(self.game_dir)
         if self.is_bedrock:
             from jace import bedrock
             w, h = (int(self.data.get("window_width") or 0), int(self.data.get("window_height") or 0))
@@ -177,7 +186,7 @@ class Instance:
             kwargs["env"] = launch_env()           # Android SDK / emulator settings
         elif not self.is_java:
             from jace.bedrock import _clean_env
-            kwargs["env"] = _clean_env()      # our AppImage's library paths would break flatpak/mcpelauncher
+            kwargs["env"] = _clean_env()      # our AppImage's library paths would break BedrockOnLinux / mcpelauncher
         if sys.platform == "win32":
             kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
         if detached:
